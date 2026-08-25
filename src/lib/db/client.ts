@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   process.env.DATABASE_URL ||
-  "mongodb+srv://Vercel-Admin-atlas-bronze-basket:ugr06X5kVq7dKw0l@atlas-bronze-basket.rzqy98b.mongodb.net/logo?retryWrites=true&w=majority";
+  "mongodb+srv://agent_brand_db:4vQ2gNWnCmCBUwy4@agentbrandcluster.xoeml2r.mongodb.net/agent_brand_db?appName=AgentBrandCluster";
+
+const MONGODB_DB = process.env.MONGODB_DB || "agent_brand_db";
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -25,21 +27,21 @@ if (!globalThis.mongooseCache) {
 }
 
 /**
- * Connect to MongoDB Atlas (database: 'logo')
+ * Connect to MongoDB Atlas (database: 'agent_brand_db')
  */
 export async function connectDB(): Promise<typeof mongoose> {
-  if (cached.conn) {
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
   if (!cached.promise) {
     const opts: mongoose.ConnectOptions = {
       bufferCommands: false,
-      dbName: "logo", // Strictly use 'logo' db
+      dbName: MONGODB_DB,
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts).then((m) => {
-      console.log("Connected to MongoDB Atlas: database 'logo'");
+      console.log(`Connected to MongoDB Atlas: database '${MONGODB_DB}'`);
       return m;
     });
   }

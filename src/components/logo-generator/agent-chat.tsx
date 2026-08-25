@@ -12,6 +12,7 @@ interface AgentChatProps {
 }
 
 export function AgentChat({ onLogoGenerated }: AgentChatProps) {
+  const [sessionId, setSessionId] = useState<string>(() => `session_${Date.now()}`);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "initial-msg",
@@ -77,6 +78,7 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
         body: JSON.stringify({
           message: messageText,
           context,
+          sessionId,
         }),
       });
 
@@ -119,6 +121,7 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
   };
 
   const handleRestart = () => {
+    setSessionId(`session_${Date.now()}`);
     setContext({});
     setMessages([
       {
@@ -160,19 +163,19 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
           className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-neutral-800 hover:border-neutral-700 transition-colors cursor-pointer"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">New Brand</span>
+          <span>New Chat</span>
         </button>
       </div>
 
-      {/* Message Stream */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 font-sans text-sm">
+      {/* Messages Scroll View */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin scrollbar-thumb-neutral-800">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
               key={msg.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.25 }}
               className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {msg.role === "assistant" && (
@@ -182,53 +185,52 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
               )}
 
               <div
-                className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-4 space-y-3 ${
+                className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-white text-black font-medium ml-auto rounded-tr-sm"
-                    : "bg-black border border-neutral-800 text-neutral-200 rounded-tl-sm"
+                    ? "bg-white text-black font-medium"
+                    : "bg-black border border-neutral-900 text-neutral-200"
                 }`}
               >
-                <div className="whitespace-pre-wrap leading-relaxed text-xs sm:text-sm">
-                  {msg.content}
-                </div>
+                {/* Markdown text rendering */}
+                <div className="whitespace-pre-wrap space-y-2">{msg.content}</div>
 
-                {/* Inline Logo Preview Card in chat if generated */}
+                {/* Inline Generated Logo Card if returned */}
                 {msg.generatedLogo && (
-                  <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center gap-3 mt-2">
-                    <div className="relative w-16 h-16 rounded-lg bg-black border border-neutral-800 flex items-center justify-center shrink-0 overflow-hidden">
-                      <Image
-                        src={msg.generatedLogo.imageUrl}
-                        alt={msg.generatedLogo.brandName}
-                        width={64}
-                        height={64}
-                        unoptimized
-                        className="object-contain"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate">{msg.generatedLogo.brandName}</h4>
-                      <p className="text-[10px] text-neutral-400 capitalize mt-0.5">
-                        Style: {msg.generatedLogo.style.replace("-", " ")}
-                      </p>
-                      <span className="text-[10px] text-emerald-400 inline-block font-mono mt-1">
-                        &bull; Ready in Live Preview
-                      </span>
+                  <div className="mt-3 pt-3 border-t border-neutral-800">
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0">
+                        <Image
+                          src={msg.generatedLogo.imageUrl}
+                          alt={msg.generatedLogo.brandName}
+                          fill
+                          unoptimized
+                          className="object-contain"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-xs text-white truncate">
+                          {msg.generatedLogo.brandName}
+                        </p>
+                        <p className="text-[11px] text-neutral-400 capitalize">
+                          {msg.generatedLogo.style.replace("-", " ")} Style
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Quick Selection Options / Chips */}
+                {/* Clickable Quick Options Chips */}
                 {msg.quickOptions && msg.quickOptions.length > 0 && (
-                  <div className="pt-2 flex flex-wrap gap-2">
-                    {msg.quickOptions.map((opt, i) => (
+                  <div className="mt-3 pt-3 border-t border-neutral-800/80 flex flex-wrap gap-1.5">
+                    {msg.quickOptions.map((opt, idx) => (
                       <button
-                        key={i}
+                        key={idx}
                         onClick={() => sendMessage(opt.value)}
                         disabled={isThinking}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-900/90 hover:bg-white hover:text-black text-neutral-200 transition-all font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="text-xs px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                       >
                         <span>{opt.label}</span>
-                        <ArrowRight className="w-3 h-3 opacity-60" />
+                        <ArrowRight className="w-2.5 h-2.5 text-neutral-500" />
                       </button>
                     ))}
                   </div>
@@ -236,70 +238,59 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
               </div>
 
               {msg.role === "user" && (
-                <div className="w-7 h-7 rounded-lg bg-neutral-800 border border-neutral-700 flex items-center justify-center text-white shrink-0 mt-0.5">
+                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-black shrink-0 mt-0.5">
                   <User className="w-3.5 h-3.5" />
                 </div>
               )}
             </motion.div>
           ))}
-
-          {/* Thinking / Synthesizing Indicator */}
-          {isThinking && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-3 justify-start"
-            >
-              <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0">
-                <Bot className="w-3.5 h-3.5" />
-              </div>
-              <div className="p-3.5 rounded-2xl rounded-tl-sm bg-black border border-neutral-800 text-neutral-400 text-xs flex items-center gap-2">
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce [animation-delay:-0.3s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce" />
-                </div>
-                <span>Architect is designing concept...</span>
-              </div>
-            </motion.div>
-          )}
         </AnimatePresence>
+
+        {/* Thinking Indicator */}
+        {isThinking && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex gap-3 items-center text-neutral-400 text-xs"
+          >
+            <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0">
+              <Bot className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black border border-neutral-900">
+              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span>Architect is crafting your concept...</span>
+            </div>
+          </motion.div>
+        )}
 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Interactive Input Box */}
-      <div className="p-3.5 border-t border-neutral-900 bg-black">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            sendMessage();
-          }}
-          className="flex items-center gap-2"
+      {/* Input Form Bar */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          sendMessage();
+        }}
+        className="p-3 bg-black border-t border-neutral-900 flex gap-2 items-center"
+      >
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Reply to the Architect or describe your vision..."
+          disabled={isThinking}
+          className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white transition-colors"
+        />
+        <button
+          type="submit"
+          disabled={!input.trim() || isThinking}
+          className="px-4 py-2.5 rounded-xl bg-white text-black font-semibold text-xs sm:text-sm hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-white transition-all flex items-center gap-1.5 cursor-pointer"
         >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isThinking}
-            placeholder={
-              !context.brandName
-                ? "Type your brand name (e.g. Acme Labs)..."
-                : !context.industry
-                ? "Type your industry..."
-                : "Type your instruction or refinement..."
-            }
-            className="flex-1 rounded-xl bg-neutral-950 border border-neutral-800 px-4 py-2.5 text-sm text-white placeholder-neutral-600 focus:border-white focus:outline-none transition-all disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={!input.trim() || isThinking}
-            className="p-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-semibold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
-      </div>
+          <span>Send</span>
+          <Send className="w-3.5 h-3.5" />
+        </button>
+      </form>
     </div>
   );
 }
