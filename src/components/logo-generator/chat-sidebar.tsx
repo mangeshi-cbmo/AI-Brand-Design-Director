@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Plus,
   MessageSquare,
@@ -9,6 +9,9 @@ import {
   PanelLeft,
   Layers,
   ChevronRight,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -32,6 +35,7 @@ interface ChatSidebarProps {
   onSelectConversation: (sessionId: string) => void;
   onNewChat: () => void;
   onDeleteConversation: (sessionId: string) => void;
+  onRenameConversation?: (sessionId: string, newTitle: string) => void;
   isLoading?: boolean;
 }
 
@@ -43,8 +47,29 @@ export function ChatSidebar({
   onSelectConversation,
   onNewChat,
   onDeleteConversation,
+  onRenameConversation,
   isLoading,
 }: ChatSidebarProps) {
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+
+  const startEditing = (sessionId: string, currentTitle: string) => {
+    setEditingSessionId(sessionId);
+    setEditTitle(currentTitle);
+  };
+
+  const handleSaveTitle = (sessionId: string) => {
+    if (editTitle.trim() && onRenameConversation) {
+      onRenameConversation(sessionId, editTitle.trim());
+    }
+    setEditingSessionId(null);
+  };
+
+  const handleCancelEditing = () => {
+    setEditingSessionId(null);
+    setEditTitle("");
+  };
+
   if (!isOpen) {
     return (
       <div className="flex flex-col items-center">
@@ -115,8 +140,8 @@ export function ChatSidebar({
         ) : (
           conversations.map((conv) => {
             const isActive = conv.sessionId === activeSessionId;
-            const displayTitle =
-              conv.brandContext?.brandName || conv.title || "Untitled Brand";
+            const displayTitle = conv.title || "Untitled Brand";
+            const isEditing = editingSessionId === conv.sessionId;
 
             return (
               <div
@@ -126,42 +151,84 @@ export function ChatSidebar({
                     ? "bg-neutral-900 border-neutral-700 text-white font-medium shadow-sm"
                     : "bg-transparent border-transparent text-neutral-400 hover:bg-neutral-900/60 hover:text-neutral-200"
                 }`}
-                onClick={() => onSelectConversation(conv.sessionId)}
+                onClick={() => !isEditing && onSelectConversation(conv.sessionId)}
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
-                  <MessageSquare
-                    className={`w-3.5 h-3.5 shrink-0 ${
-                      isActive ? "text-white" : "text-neutral-500"
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs">{displayTitle}</p>
-                    <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
-                      {formatDate(conv.updatedAt)}
-                    </p>
+                {isEditing ? (
+                  <div
+                    className="flex items-center gap-1.5 w-full"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveTitle(conv.sessionId);
+                        if (e.key === "Escape") handleCancelEditing();
+                      }}
+                      autoFocus
+                      className="flex-1 bg-black border border-neutral-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-white"
+                    />
+                    <button
+                      onClick={() => handleSaveTitle(conv.sessionId)}
+                      className="p-1 rounded bg-white text-black hover:bg-neutral-200"
+                      title="Save"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={handleCancelEditing}
+                      className="p-1 rounded text-neutral-400 hover:text-white"
+                      title="Cancel"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                      <MessageSquare
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          isActive ? "text-white" : "text-neutral-500"
+                        }`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs">{displayTitle}</p>
+                        <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                          {formatDate(conv.updatedAt)}
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Delete Conversation Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteConversation(conv.sessionId);
-                  }}
-                  title="Delete Conversation"
-                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800 transition-all cursor-pointer shrink-0"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                    {/* Actions: Rename & Delete */}
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditing(conv.sessionId, displayTitle);
+                        }}
+                        title="Rename Session"
+                        className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 transition-all cursor-pointer"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteConversation(conv.sessionId);
+                        }}
+                        title="Delete Session"
+                        className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             );
           })
         )}
-      </div>
-
-      {/* Sidebar Footer */}
-      <div className="p-3 border-t border-neutral-900 bg-black/40 text-[10px] text-neutral-500 text-center font-mono">
-        Auto-synced with MongoDB Atlas
       </div>
     </aside>
   );

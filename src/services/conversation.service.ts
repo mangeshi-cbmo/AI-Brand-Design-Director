@@ -78,16 +78,11 @@ export class ConversationService {
       createdAt: new Date(),
     };
 
-    const title = updatedContext.brandName
-      ? `Brand: ${updatedContext.brandName}`
-      : "Brand Logo Session";
-
     const conv = await ConversationModel.findOneAndUpdate(
       { sessionId },
       {
         $setOnInsert: { userId, sessionId },
         $set: {
-          title,
           brandContext: updatedContext,
           status: "active",
         },
@@ -99,6 +94,22 @@ export class ConversationService {
     );
 
     return conv;
+  }
+
+  /**
+   * Update conversation title (rename session)
+   */
+  static async updateConversationTitle(
+    sessionId: string,
+    userId: string,
+    title: string
+  ) {
+    await connectDB();
+    return ConversationModel.findOneAndUpdate(
+      { sessionId, userId },
+      { $set: { title } },
+      { new: true }
+    );
   }
 
   /**

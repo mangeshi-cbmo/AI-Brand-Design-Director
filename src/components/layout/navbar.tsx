@@ -22,7 +22,7 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-neutral-900 bg-black/90 backdrop-blur-md">
-      <div className="max-w-6xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6">
+      <div className="w-full flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link href={user ? "/generate" : "/"} className="flex items-center gap-2.5 group">
           <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-black font-extrabold text-sm tracking-tighter">
             L
@@ -68,7 +68,7 @@ export function Navbar() {
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
                 )}
-                <span className="text-xs text-neutral-300 font-medium truncate max-w-[120px]">
+                <span className="text-xs text-neutral-300 font-medium truncate max-w-[140px]">
                   {user.name || user.email}
                 </span>
               </div>

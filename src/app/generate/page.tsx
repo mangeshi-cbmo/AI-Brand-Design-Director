@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { MessageSquare, Edit3, Compass, Plus, PanelLeft } from "lucide-react";
+import { MessageSquare, Edit3, Compass, PanelLeft } from "lucide-react";
 import { AgentChat } from "@/components/logo-generator/agent-chat";
 import { LogoCanvas } from "@/components/logo-generator/logo-canvas";
 import { LogoEditor } from "@/components/canvas-editor/logo-editor";
@@ -79,6 +79,22 @@ export default function GenerateStudioPage() {
     }
   };
 
+  // Rename a conversation
+  const handleRenameConversation = async (sessionId: string, newTitle: string) => {
+    try {
+      await fetch("/api/ai/agent-chat", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, title: newTitle }),
+      });
+      setConversations((prev) =>
+        prev.map((c) => (c.sessionId === sessionId ? { ...c, title: newTitle } : c))
+      );
+    } catch (err) {
+      console.error("Failed to rename conversation:", err);
+    }
+  };
+
   if (status === "loading") {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -92,9 +108,9 @@ export default function GenerateStudioPage() {
   }
 
   return (
-    <div className="space-y-5 max-w-7xl mx-auto">
+    <div className="w-full flex-1 flex flex-col space-y-4">
       {/* Studio Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-900 pb-4">
+      <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-900 pb-3.5">
         <div className="flex items-center gap-3">
           {!isSidebarOpen && (
             <button
@@ -152,7 +168,7 @@ export default function GenerateStudioPage() {
 
       {/* Main Studio Viewport */}
       {activeView === "studio" ? (
-        <div className="flex flex-col lg:flex-row gap-5 items-start">
+        <div className="w-full flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 items-start">
           {/* ChatGPT-style Left Sidebar */}
           <ChatSidebar
             conversations={conversations}
@@ -162,6 +178,7 @@ export default function GenerateStudioPage() {
             onSelectConversation={handleSelectConversation}
             onNewChat={handleNewChat}
             onDeleteConversation={handleDeleteConversation}
+            onRenameConversation={handleRenameConversation}
             isLoading={isLoadingConversations}
           />
 
@@ -176,7 +193,7 @@ export default function GenerateStudioPage() {
           </div>
 
           {/* Right Live Preview Canvas */}
-          <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-20">
+          <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 lg:sticky lg:top-20">
             <LogoCanvas
               logo={currentLogo}
               isGenerating={false}
@@ -186,7 +203,7 @@ export default function GenerateStudioPage() {
         </div>
       ) : (
         /* Full Canvas Editor View */
-        <div className="space-y-4">
+        <div className="w-full space-y-4">
           <LogoEditor
             logo={currentLogo}
             onClose={() => setActiveView("studio")}

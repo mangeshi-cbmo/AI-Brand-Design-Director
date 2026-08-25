@@ -101,6 +101,37 @@ export async function GET(req: NextRequest) {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.email || "guest_user";
+
+    const body = await req.json();
+    const { sessionId, title } = body;
+
+    if (!sessionId || !title) {
+      return NextResponse.json(
+        { success: false, error: "sessionId and title are required" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await ConversationService.updateConversationTitle(
+      sessionId,
+      userId,
+      title.trim()
+    );
+
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error) {
+    console.error("Error updating conversation title:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to update title" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

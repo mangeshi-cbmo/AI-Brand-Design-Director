@@ -9,7 +9,7 @@ import { SessionProvider } from "@/components/providers/session-provider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: `${siteConfig.name} - AI Logo Generator`,
+  title: `${siteConfig.name} - AI Brand Architect & Logo Studio`,
   description: siteConfig.description,
 };
 
@@ -25,7 +25,7 @@ export default function RootLayout({
       >
         <SessionProvider>
           <Navbar />
-          <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12">
+          <main className="flex-1 w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col">
             {children}
           </main>
           <Footer />

@@ -4,15 +4,17 @@ import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send,
+  ArrowUp,
   Compass,
-  User,
   ArrowRight,
-  RotateCcw,
+  Check,
   CheckCircle2,
   Terminal,
-  Cpu,
   Layers,
+  Sparkles,
+  Activity,
+  Cpu,
+  Sliders,
 } from "lucide-react";
 import { ChatMessage, QuickOption } from "@/types/chat";
 import { GeneratedLogo } from "@/types/logo";
@@ -23,6 +25,13 @@ interface AgentChatProps {
   onSessionUpdated?: () => void;
 }
 
+const THINKING_STEPS = [
+  "Analyzing brand requirements...",
+  "Working on typography & visual balance...",
+  "Creating geometric mark tokens...",
+  "Synthesizing high-res vector emblem...",
+];
+
 export function AgentChat({
   sessionId,
   onLogoGenerated,
@@ -32,8 +41,7 @@ export function AgentChat({
     {
       id: "initial-msg",
       role: "assistant",
-      content:
-        "Welcome to the **Brand Identity Studio**. I am your **Brand Architect**.\n\nI will guide you to formulate your brand strategy and engineer commercial-grade logo marks.\n\nTo begin, **what is the name of your brand or company?**",
+      content: "Hi! Let's craft your logo mark.\n\n**What is the name of your brand or company?**",
       timestamp: new Date(),
       quickOptions: [
         { label: "Acme AI", value: "Acme AI" },
@@ -46,6 +54,8 @@ export function AgentChat({
 
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [thinkingStepIdx, setThinkingStepIdx] = useState(0);
+
   const [context, setContext] = useState<{
     brandName?: string;
     industry?: string;
@@ -64,6 +74,18 @@ export function AgentChat({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isThinking]);
+
+  // Cycle thinking step words when thinking
+  useEffect(() => {
+    if (!isThinking) {
+      setThinkingStepIdx(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setThinkingStepIdx((prev) => (prev + 1) % THINKING_STEPS.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [isThinking]);
 
   // Load conversation history when sessionId changes
   useEffect(() => {
@@ -96,7 +118,6 @@ export function AgentChat({
           setMessages(loadedMessages);
           setContext(data.data.brandContext || {});
 
-          // If there's an existing logo in this session, activate it
           const lastLogo = loadedMessages.slice().reverse().find((m) => m.generatedLogo);
           if (lastLogo?.generatedLogo) {
             onLogoGenerated(lastLogo.generatedLogo);
@@ -146,7 +167,6 @@ export function AgentChat({
 
       setContext(newContext || {});
 
-      // If a logo was created by the agent, pass it to the preview canvas
       if (generatedLogo) {
         onLogoGenerated(generatedLogo);
       }
@@ -162,7 +182,6 @@ export function AgentChat({
 
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // Notify parent to refresh conversation list in sidebar
       if (onSessionUpdated) {
         onSessionUpdated();
       }
@@ -181,71 +200,124 @@ export function AgentChat({
   };
 
   return (
-    <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden">
-      {/* Studio Agent Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-900 bg-black/70 backdrop-blur-md">
+    <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden font-sans">
+      {/* Sleek Agent Activity Header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-900 bg-[#0d0d0d]">
         <div className="flex items-center gap-3">
-          {/* Agent Distinct Monogram Badge */}
-          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-black font-mono font-black text-xs shadow-md">
-            <Compass className="w-4 h-4 text-black stroke-[2.2]" />
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-semibold text-neutral-200 tracking-wide font-mono">
+              agent:brand-architect
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">
-                Brand Architect
-              </span>
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-neutral-900 border border-neutral-800 text-neutral-300">
-                GPT-4o
-              </span>
-            </div>
-            <p className="text-[11px] text-neutral-400 font-mono">
-              {context.brandName ? `Active Brand: ${context.brandName}` : "Conversational Design Engine"}
-            </p>
-          </div>
+          {context.brandName && (
+            <span className="text-[11px] text-neutral-500 font-mono hidden sm:inline">
+              &bull; session: {context.brandName.toLowerCase().replace(/\s+/g, "-")}
+            </span>
+          )}
         </div>
 
         {context.brandName && (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900/80 border border-neutral-800 text-[11px] font-mono text-neutral-300">
-            <Layers className="w-3 h-3 text-neutral-400" />
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-neutral-900 border border-neutral-800 text-[11px] font-mono text-neutral-300">
+            <span className="text-neutral-500">style:</span>
             <span className="capitalize">{context.style || "Minimal"}</span>
           </div>
         )}
       </div>
 
-      {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin scrollbar-thumb-neutral-800">
+      {/* Messages Viewport */}
+      <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 scrollbar-thin scrollbar-thumb-neutral-800">
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
+          {messages.map((msg, index) => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className={`flex gap-3 items-start ${
-                msg.role === "user" ? "justify-end" : "justify-start"
-              }`}
+              className="space-y-4"
             >
-              {/* Agent Avatar */}
-              {msg.role === "assistant" && (
-                <div className="w-8 h-8 rounded-xl bg-black border border-neutral-800 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-sm">
-                  <Compass className="w-4 h-4 text-neutral-200 stroke-[2]" />
+              {/* USER MESSAGE: Modern Dark Capsule */}
+              {msg.role === "user" ? (
+                <div className="flex justify-end">
+                  <div className="max-w-[85%] rounded-2xl px-4 py-2.5 bg-[#1f1f1f] border border-neutral-800 text-neutral-100 text-sm font-normal shadow-sm">
+                    {msg.content}
+                  </div>
                 </div>
-              )}
+              ) : (
+                /* ASSISTANT MESSAGE: Dynamic Agent Action Card */
+                <div className="space-y-3">
+                  {/* Dynamic Action & State Card (No brand.spec.json text) */}
+                  {index > 0 && context.brandName && (
+                    <div className="rounded-xl border border-neutral-800/80 bg-[#111111] overflow-hidden text-xs font-mono shadow-inner">
+                      {/* Card Dynamic Action Bar */}
+                      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800/80 bg-[#141414] text-[11px] text-neutral-400">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <Activity className="w-3.5 h-3.5 text-neutral-400" />
+                          <span className="text-neutral-200 font-medium">
+                            {msg.generatedLogo
+                              ? "Creating & Synthesizing Emblem"
+                              : "Analyzing & Formulating Parameters"}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Synchronized
+                        </span>
+                      </div>
 
-              <div
-                className={`max-w-[82%] rounded-2xl px-4 py-3.5 text-xs sm:text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-white text-black font-medium shadow-md"
-                    : "bg-black border border-neutral-900 text-neutral-200 shadow-sm"
-                }`}
-              >
-                {/* Message Body */}
-                <div className="whitespace-pre-wrap space-y-2">{msg.content}</div>
+                      {/* Code Block with Line Numbers & Interactive Values */}
+                      <div className="p-3 bg-[#0d0d0d] font-mono text-[11px] leading-relaxed text-neutral-300">
+                        <div className="flex gap-3">
+                          <span className="text-neutral-600 select-none">01</span>
+                          <span>
+                            <span className="text-neutral-400">brand:</span>{" "}
+                            <span className="text-white font-semibold">&quot;{context.brandName}&quot;</span>
+                          </span>
+                        </div>
+                        <div className="flex gap-3">
+                          <span className="text-neutral-600 select-none">02</span>
+                          <span>
+                            <span className="text-neutral-400">industry:</span>{" "}
+                            <span className="text-neutral-200">&quot;{context.industry || "Technology"}&quot;</span>
+                          </span>
+                        </div>
+                        <div className="flex gap-3">
+                          <span className="text-neutral-600 select-none">03</span>
+                          <span>
+                            <span className="text-neutral-400">style:</span>{" "}
+                            <span className="text-emerald-400 font-medium">&quot;{context.style || "minimalist"}&quot;</span>
+                          </span>
+                        </div>
+                        {context.colorPalette && (
+                          <div className="flex gap-3">
+                            <span className="text-neutral-600 select-none">04</span>
+                            <span>
+                              <span className="text-neutral-400">palette:</span>{" "}
+                              <span className="text-neutral-300">&quot;{context.colorPalette}&quot;</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
-                {/* Inline Generated Logo Card */}
-                {msg.generatedLogo && (
-                  <div className="mt-3.5 pt-3.5 border-t border-neutral-800">
-                    <div className="flex items-center gap-3 bg-neutral-950 p-2.5 rounded-xl border border-neutral-800">
+                      <div className="px-3.5 py-1.5 border-t border-neutral-900 bg-[#0d0d0d] text-[10px] text-neutral-500 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          <span>Working on visual mark synthesis</span>
+                        </div>
+                        <span className="text-neutral-600 font-mono">active state</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Main Response Typography */}
+                  <div className="text-neutral-200 text-sm leading-relaxed whitespace-pre-wrap">
+                    {msg.content}
+                  </div>
+
+                  {/* Inline Generated Logo Card if available */}
+                  {msg.generatedLogo && (
+                    <div className="mt-3 rounded-xl border border-neutral-800 bg-[#121212] p-3 flex items-center gap-3.5">
                       <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-neutral-700 bg-black shrink-0">
                         <Image
                           src={msg.generatedLogo.imageUrl}
@@ -258,59 +330,60 @@ export function AgentChat({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                          <p className="font-bold text-xs text-white truncate">
+                          <p className="font-semibold text-xs text-white truncate">
                             {msg.generatedLogo.brandName}
                           </p>
                         </div>
-                        <p className="text-[11px] text-neutral-400 capitalize mt-0.5">
-                          {msg.generatedLogo.style.replace("-", " ")} Mark
+                        <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
+                          {msg.generatedLogo.style.replace("-", " ")} emblem synthesized
                         </p>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Quick Action Chips */}
-                {msg.quickOptions && msg.quickOptions.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-neutral-800/80 flex flex-wrap gap-1.5">
-                    {msg.quickOptions.map((opt, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => sendMessage(opt.value)}
-                        disabled={isThinking}
-                        className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      >
-                        <span>{opt.label}</span>
-                        <ArrowRight className="w-3 h-3 text-neutral-500" />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* User Avatar */}
-              {msg.role === "user" && (
-                <div className="w-8 h-8 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0 mt-0.5 font-mono text-[10px] font-bold">
-                  YOU
+                  {/* Quick Action Suggestion Chips */}
+                  {msg.quickOptions && msg.quickOptions.length > 0 && (
+                    <div className="pt-2 flex flex-wrap gap-1.5">
+                      {msg.quickOptions.map((opt, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => sendMessage(opt.value)}
+                          disabled={isThinking}
+                          className="text-xs px-3 py-1.5 rounded-xl border border-neutral-800 bg-[#141414] hover:bg-neutral-800 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <span>{opt.label}</span>
+                          <ArrowRight className="w-3 h-3 text-neutral-500" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Architect Reasoning Indicator */}
+        {/* Live Dynamic Action / Working State */}
         {isThinking && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3 items-center text-neutral-400 text-xs"
+            className="space-y-2 text-xs font-mono"
           >
-            <div className="w-8 h-8 rounded-xl bg-black border border-neutral-800 flex items-center justify-center text-white shrink-0">
-              <Compass className="w-4 h-4 text-neutral-400 animate-spin" />
+            <div className="flex items-center gap-2.5 text-neutral-200 bg-[#121212] border border-neutral-800 rounded-xl px-3.5 py-2.5">
+              <div className="w-3.5 h-3.5 rounded-full border-2 border-neutral-600 border-t-white animate-spin" />
+              <span className="font-medium">{THINKING_STEPS[thinkingStepIdx]}</span>
             </div>
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black border border-neutral-900">
-              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span>Architect is analyzing requirements & synthesizing concepts...</span>
+
+            <div className="pl-3 space-y-1 text-[11px] text-neutral-500">
+              <div className="flex items-center gap-2">
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>Analyzing brand context & market sector</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse ml-0.5 mr-1" />
+                <span>Working on vector prompt composition & geometry</span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -318,31 +391,48 @@ export function AgentChat({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          sendMessage();
-        }}
-        className="p-3 bg-black border-t border-neutral-900 flex gap-2 items-center"
-      >
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Describe your brand, industry, or visual direction..."
-          disabled={isThinking}
-          className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white transition-colors"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || isThinking}
-          className="px-4 py-2.5 rounded-xl bg-white text-black font-semibold text-xs sm:text-sm hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-white transition-all flex items-center gap-1.5 cursor-pointer"
+      {/* Modern Developer-Style Prompt Container */}
+      <div className="p-3.5 bg-[#0a0a0a] border-t border-neutral-900">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendMessage();
+          }}
+          className="rounded-2xl border border-neutral-800 bg-[#121212] p-3 transition-colors focus-within:border-neutral-700"
         >
-          <span>Send</span>
-          <Send className="w-3.5 h-3.5" />
-        </button>
-      </form>
+          {/* Main Input Textarea/Field */}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Send follow-up or describe your brand direction..."
+            disabled={isThinking}
+            className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none"
+          />
+
+          {/* Bottom Action Row */}
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-neutral-800/60">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1a1a1a] border border-neutral-800 text-[11px] font-mono text-neutral-300">
+                <Compass className="w-3 h-3 text-neutral-400" />
+                <span>Brand Architect</span>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!input.trim() || isThinking}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                input.trim() && !isThinking
+                  ? "bg-white text-black hover:bg-neutral-200 shadow-md"
+                  : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
+              }`}
+            >
+              <ArrowUp className="w-4 h-4 stroke-[2.2]" />
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
