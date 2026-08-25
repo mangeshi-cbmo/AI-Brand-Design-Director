@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LogoForge AI — Autonomous Brand & Logo Design Agent
 
-## Getting Started
+A modern, production-grade full-stack AI Brand Architect web application. LogoForge pairs conversational AI orchestration with real-time vector image generation and an interactive canvas editor.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## ⚡ Features
+
+- 🤖 **AI Brand Architect Chatbot**: Conversational agent powered by **OpenAI GPT-4o** that interviews users, extracts branding parameters, engineers master prompts, and generates commercial-ready logo marks.
+- 🎨 **Interactive Canvas Editor (Fabric.js)**: Drag, scale, rotate, add custom typography layers (Google Fonts), geometric framing elements (badges, circles, rectangles), background toggles, and color adjustments.
+- 🍃 **MongoDB Atlas Persistence**: Automatically connects to your Atlas cluster (`logo` database) to save generation history, metadata, prompts, and user designs.
+- 🔐 **Secure 2FA & Authentication**: Built-in Google Authenticator (RFC 6238 TOTP) and NextAuth session integration.
+- 🖤 **Monochrome Design System**: Pure black & white minimalist UI built with Tailwind CSS and Framer Motion spring micro-interactions.
+- 📦 **High-Resolution Exports**: Download 2x Multiplier PNGs or Transparent PNGs ready for web, mobile, and merchandise.
+
+---
+
+## 🛠️ Technology Stack
+
+- **Framework**: [Next.js 16 (App Router)](https://nextjs.org/) + [React 19](https://react.dev/)
+- **Language**: TypeScript
+- **AI Brain & Generation**: OpenAI SDK (`gpt-4o-mini`, `gpt-image-1` / DALL-E)
+- **Database & ORM**: MongoDB Atlas + Mongoose
+- **Canvas Engine**: [Fabric.js](http://fabricjs.com/)
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Authentication**: NextAuth.js + `otplib` (Google Authenticator TOTP) + `qrcode`
+- **Styling**: Tailwind CSS + Lucide Icons
+
+---
+
+## 📁 Architecture Overview
+
+```
+logo-genrator/
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── ai/
+│   │   │   │   ├── agent-chat/route.ts   # OpenAI Agent conversational reasoning & generation
+│   │   │   │   └── generate-logo/route.ts# Core logo synthesis endpoint
+│   │   │   ├── auth/
+│   │   │   │   ├── [...nextauth]/route.ts# NextAuth handler
+│   │   │   │   └── totp/setup/route.ts   # Google Authenticator QR generator
+│   │   │   └── logos/route.ts            # MongoDB Atlas CRUD endpoints
+│   │   ├── generate/page.tsx             # Studio: Agent Chat & Live Preview / Canvas Editor
+│   │   ├── history/page.tsx              # My Logos gallery (fetched from MongoDB)
+│   │   └── page.tsx                      # Minimalist Landing page with 2FA TOTP login
+│   │
+│   ├── components/
+│   │   ├── canvas-editor/
+│   │   │   └── logo-editor.tsx           # Fabric.js interactive canvas editor
+│   │   ├── logo-generator/
+│   │   │   ├── agent-chat.tsx            # Conversational Brand Architect chatbot
+│   │   │   └── logo-canvas.tsx           # Live preview & inspector
+│   │   ├── layout/                       # Minimal Navbar & Footer
+│   │   └── ui/                           # Reusable UI primitives (Button, Card, Badge)
+│   │
+│   ├── lib/
+│   │   ├── ai/
+│   │   │   ├── agent-orchestrator.ts     # OpenAI GPT-4o + Image Model reasoning engine
+│   │   │   ├── prompts.ts                # Master prompt engineering templates
+│   │   │   └── service.ts                # AI Provider abstraction layer
+│   │   ├── auth/
+│   │   │   ├── auth-options.ts           # NextAuth options & session strategy
+│   │   │   └── totp.ts                   # TOTP generation & verification service
+│   │   └── db/
+│   │       ├── client.ts                 # MongoDB Atlas connection singleton
+│   │       └── models/logo.model.ts      # Mongoose Logo Schema
+│   │
+│   ├── services/
+│   │   └── logo.service.ts               # Database CRUD repository layer
+│   └── types/                            # TypeScript interfaces (Logo, Chat, API)
+│
+├── .env.example                          # Environment variables template
+├── package.json
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🚀 Getting Started
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 1. Clone the repository
+```bash
+git clone https://github.com/HimanshuDoyeCBMO/brand-agent.git
+cd brand-agent
+```
 
-## Learn More
+### 2. Install dependencies
+```bash
+npm install
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Configure Environment Variables
+Create a `.env.local` file in the root directory:
+```bash
+cp .env.example .env.local
+```
+Fill in your credentials:
+```env
+NODE_ENV=development
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your_random_secret_string
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# MongoDB Atlas
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/logo?retryWrites=true&w=majority
+DATABASE_URL=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/logo?retryWrites=true&w=majority
+MONGODB_DB=logo
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# OpenAI API Key
+OPENAI_API_KEY=your_openai_api_key_here
+AI_API_KEY=your_openai_api_key_here
+AI_PROVIDER=openai
+```
 
-## Deploy on Vercel
+### 4. Run the development server
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📄 License
+MIT License &copy; 2026 LogoForge AI.
