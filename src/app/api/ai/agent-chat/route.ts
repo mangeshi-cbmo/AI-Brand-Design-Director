@@ -37,23 +37,27 @@ export async function POST(req: NextRequest) {
     );
 
     // 2. Persist entire conversation turn properly into MongoDB Atlas 'agent_brand_db'
-    await ConversationService.appendTurn(
-      sessionId,
-      userId,
-      userMessage,
-      result.message,
-      result.context,
-      result.quickOptions,
-      result.generatedLogo
-        ? {
-            logoId: result.generatedLogo.id,
-            imageUrl: result.generatedLogo.imageUrl,
-            brandName: result.generatedLogo.brandName,
-            style: result.generatedLogo.style,
-            promptUsed: result.generatedLogo.promptUsed,
-          }
-        : undefined
-    );
+    try {
+      await ConversationService.appendTurn(
+        sessionId,
+        userId,
+        userMessage,
+        result.message,
+        result.context,
+        result.quickOptions,
+        result.generatedLogo
+          ? {
+              logoId: result.generatedLogo.id,
+              imageUrl: result.generatedLogo.imageUrl,
+              brandName: result.generatedLogo.brandName,
+              style: result.generatedLogo.style,
+              promptUsed: result.generatedLogo.promptUsed,
+            }
+          : undefined
+      );
+    } catch (dbError) {
+      console.error("Warning: Failed to persist conversation turn to DB:", dbError);
+    }
 
     return NextResponse.json({
       success: true,
