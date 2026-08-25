@@ -256,7 +256,7 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-900 pb-4">
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-white" />
+            <Layers className="w-4 h-4 text-white" />
             Interactive Canvas Editor
           </h3>
           <p className="text-xs text-neutral-400 mt-0.5">

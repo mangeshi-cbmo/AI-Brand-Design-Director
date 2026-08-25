@@ -100,3 +100,28 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.email || "guest_user";
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get("sessionId");
+
+    if (!sessionId) {
+      return NextResponse.json(
+        { success: false, error: "sessionId is required" },
+        { status: 400 }
+      );
+    }
+
+    await ConversationService.deleteConversation(sessionId, userId);
+    return NextResponse.json({ success: true, message: "Conversation deleted" });
+  } catch (error) {
+    console.error("Error deleting conversation:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to delete conversation" },
+      { status: 500 }
+    );
+  }
+}

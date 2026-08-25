@@ -1,25 +1,83 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { MessageSquare, Edit3, ArrowLeft } from "lucide-react";
+import { MessageSquare, Edit3, Compass, Plus, PanelLeft } from "lucide-react";
 import { AgentChat } from "@/components/logo-generator/agent-chat";
 import { LogoCanvas } from "@/components/logo-generator/logo-canvas";
 import { LogoEditor } from "@/components/canvas-editor/logo-editor";
+import { ChatSidebar, ConversationSummary } from "@/components/logo-generator/chat-sidebar";
 import { GeneratedLogo } from "@/types/logo";
 
 export default function GenerateStudioPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
+
   const [currentLogo, setCurrentLogo] = useState<GeneratedLogo | null>(null);
   const [activeView, setActiveView] = useState<"studio" | "editor">("studio");
+
+  // Sidebar & session state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [activeSessionId, setActiveSessionId] = useState<string>(() => `session_${Date.now()}`);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/");
     }
   }, [status, router]);
+
+  // Fetch conversation sessions from MongoDB Atlas
+  const fetchConversations = useCallback(async () => {
+    if (status !== "authenticated") return;
+    try {
+      setIsLoadingConversations(true);
+      const res = await fetch("/api/ai/agent-chat");
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setConversations(json.data);
+      }
+    } catch (err) {
+      console.error("Failed to load conversations:", err);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  }, [status]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+
+  // Start a new conversation
+  const handleNewChat = () => {
+    const newSessionId = `session_${Date.now()}`;
+    setActiveSessionId(newSessionId);
+    setCurrentLogo(null);
+    setActiveView("studio");
+  };
+
+  // Select an existing conversation
+  const handleSelectConversation = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setActiveView("studio");
+  };
+
+  // Delete a conversation
+  const handleDeleteConversation = async (sessionId: string) => {
+    try {
+      await fetch(`/api/ai/agent-chat?sessionId=${sessionId}`, {
+        method: "DELETE",
+      });
+      setConversations((prev) => prev.filter((c) => c.sessionId !== sessionId));
+      if (activeSessionId === sessionId) {
+        handleNewChat();
+      }
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+    }
+  };
 
   if (status === "loading") {
     return (
@@ -34,22 +92,35 @@ export default function GenerateStudioPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Studio Header & View Switcher */}
+    <div className="space-y-5 max-w-7xl mx-auto">
+      {/* Studio Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-900 pb-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            {activeView === "studio" ? "Logo Studio" : "Canvas Editor"}
-          </h1>
-          <p className="text-sm text-neutral-400 mt-0.5">
-            {activeView === "studio"
-              ? "Chat with your AI Brand Architect to generate unique logo marks."
-              : "Customize typography, resize elements, adjust colors & framing on the canvas."}
-          </p>
+        <div className="flex items-center gap-3">
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              title="Show Sessions"
+              className="p-2 rounded-xl border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 text-neutral-300 transition-colors cursor-pointer"
+            >
+              <PanelLeft className="w-4 h-4" />
+            </button>
+          )}
+
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <Compass className="w-5 h-5 text-white" />
+              <span>{activeView === "studio" ? "Brand Identity Studio" : "Canvas Editor"}</span>
+            </h1>
+            <p className="text-xs text-neutral-400 mt-0.5">
+              {activeView === "studio"
+                ? "Conversational Brand Architecture & Real-Time Mark Synthesis"
+                : "Vector Typography, Geometry Reshaping & High-Resolution Export"}
+            </p>
+          </div>
         </div>
 
-        {/* View Switcher Pills */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-950 border border-neutral-900">
+        {/* View Switcher Controls */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-950 border border-neutral-900 self-start sm:self-auto">
           <button
             onClick={() => setActiveView("studio")}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
@@ -59,7 +130,7 @@ export default function GenerateStudioPage() {
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Agent Chat</span>
+            <span>Studio Chat</span>
           </button>
 
           <button
@@ -79,18 +150,33 @@ export default function GenerateStudioPage() {
         </div>
       </div>
 
-      {/* VIEW 1: AGENT CHAT + LIVE PREVIEW */}
-      {activeView === "studio" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          <div className="lg:col-span-7">
+      {/* Main Studio Viewport */}
+      {activeView === "studio" ? (
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
+          {/* ChatGPT-style Left Sidebar */}
+          <ChatSidebar
+            conversations={conversations}
+            activeSessionId={activeSessionId}
+            isOpen={isSidebarOpen}
+            onToggle={() => setIsSidebarOpen((prev) => !prev)}
+            onSelectConversation={handleSelectConversation}
+            onNewChat={handleNewChat}
+            onDeleteConversation={handleDeleteConversation}
+            isLoading={isLoadingConversations}
+          />
+
+          {/* Central Chat Interface */}
+          <div className="flex-1 w-full min-w-0">
             <AgentChat
-              onLogoGenerated={(logo) => {
-                setCurrentLogo(logo);
-              }}
+              key={activeSessionId}
+              sessionId={activeSessionId}
+              onLogoGenerated={(logo) => setCurrentLogo(logo)}
+              onSessionUpdated={fetchConversations}
             />
           </div>
 
-          <div className="lg:col-span-5 lg:sticky lg:top-20">
+          {/* Right Live Preview Canvas */}
+          <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-20">
             <LogoCanvas
               logo={currentLogo}
               isGenerating={false}
@@ -98,10 +184,8 @@ export default function GenerateStudioPage() {
             />
           </div>
         </div>
-      )}
-
-      {/* VIEW 2: FULL INTERACTIVE CANVAS EDITOR */}
-      {activeView === "editor" && (
+      ) : (
+        /* Full Canvas Editor View */
         <div className="space-y-4">
           <LogoEditor
             logo={currentLogo}

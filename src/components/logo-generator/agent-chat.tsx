@@ -3,27 +3,43 @@
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles, RefreshCw, Bot, User, ArrowRight } from "lucide-react";
+import {
+  Send,
+  Compass,
+  User,
+  ArrowRight,
+  RotateCcw,
+  CheckCircle2,
+  Terminal,
+  Cpu,
+  Layers,
+} from "lucide-react";
 import { ChatMessage, QuickOption } from "@/types/chat";
 import { GeneratedLogo } from "@/types/logo";
 
 interface AgentChatProps {
+  sessionId: string;
   onLogoGenerated: (logo: GeneratedLogo) => void;
+  onSessionUpdated?: () => void;
 }
 
-export function AgentChat({ onLogoGenerated }: AgentChatProps) {
-  const [sessionId, setSessionId] = useState<string>(() => `session_${Date.now()}`);
+export function AgentChat({
+  sessionId,
+  onLogoGenerated,
+  onSessionUpdated,
+}: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "initial-msg",
       role: "assistant",
-      content: "Hello! I am your **AI Brand Architect**. I'll help you craft a unique, professional logo mark step-by-step.\n\nTo get started, **what is the name of your brand or company?**",
+      content:
+        "Welcome to the **Brand Identity Studio**. I am your **Brand Architect**.\n\nI will guide you to formulate your brand strategy and engineer commercial-grade logo marks.\n\nTo begin, **what is the name of your brand or company?**",
       timestamp: new Date(),
       quickOptions: [
         { label: "Acme AI", value: "Acme AI" },
         { label: "Apex Labs", value: "Apex Labs" },
         { label: "Lumina Studio", value: "Lumina Studio" },
-        { label: "Verve", value: "Verve" },
+        { label: "Verve Dynamics", value: "Verve Dynamics" },
       ],
     },
   ]);
@@ -49,15 +65,54 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
     scrollToBottom();
   }, [messages, isThinking]);
 
+  // Load conversation history when sessionId changes
+  useEffect(() => {
+    async function loadConversation() {
+      if (!sessionId) return;
+      try {
+        const res = await fetch(`/api/ai/agent-chat?sessionId=${sessionId}`);
+        const data = await res.json();
+        if (data.success && data.data && data.data.messages?.length > 0) {
+          const loadedMessages: ChatMessage[] = data.data.messages.map((m: any) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.createdAt),
+            quickOptions: m.quickOptions,
+            generatedLogo: m.logoData
+              ? {
+                  id: m.logoData.logoId || `logo-${Date.now()}`,
+                  imageUrl: m.logoData.imageUrl,
+                  brandName: m.logoData.brandName || "Brand Logo",
+                  industry: data.data.brandContext?.industry || "General",
+                  style: (m.logoData.style as any) || "minimalist",
+                  colorPalette: (data.data.brandContext?.colorPalette as any) || "monochrome",
+                  promptUsed: m.logoData.promptUsed || "",
+                  createdAt: new Date(m.createdAt).toISOString(),
+                }
+              : undefined,
+          }));
+
+          setMessages(loadedMessages);
+          setContext(data.data.brandContext || {});
+
+          // If there's an existing logo in this session, activate it
+          const lastLogo = loadedMessages.slice().reverse().find((m) => m.generatedLogo);
+          if (lastLogo?.generatedLogo) {
+            onLogoGenerated(lastLogo.generatedLogo);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load session:", err);
+      }
+    }
+
+    loadConversation();
+  }, [sessionId]);
+
   const sendMessage = async (textToSend?: string) => {
     const messageText = (textToSend || input).trim();
     if (!messageText || isThinking) return;
-
-    // Check if user clicked start over
-    if (messageText === "START_OVER") {
-      handleRestart();
-      return;
-    }
 
     // 1. Append user message
     const userMsg: ChatMessage = {
@@ -106,12 +161,17 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
+
+      // Notify parent to refresh conversation list in sidebar
+      if (onSessionUpdated) {
+        onSessionUpdated();
+      }
     } catch (err) {
       console.error(err);
       const errorMsg: ChatMessage = {
         id: `error_${Date.now()}`,
         role: "assistant",
-        content: "I encountered an issue generating your request. Let's try again or refine your prompt.",
+        content: "I encountered a processing error. Please retry or adjust your requirements.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -120,85 +180,73 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
     }
   };
 
-  const handleRestart = () => {
-    setSessionId(`session_${Date.now()}`);
-    setContext({});
-    setMessages([
-      {
-        id: `reset_${Date.now()}`,
-        role: "assistant",
-        content: "Let's start fresh! **What is the name of your new brand or project?**",
-        timestamp: new Date(),
-        quickOptions: [
-          { label: "Nova Labs", value: "Nova Labs" },
-          { label: "Pulse", value: "Pulse" },
-          { label: "Zenith Studio", value: "Zenith Studio" },
-        ],
-      },
-    ]);
-  };
-
   return (
-    <div className="flex flex-col h-[650px] w-full rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden">
-      {/* Agent Chat Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-900 bg-black/60 backdrop-blur-sm">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-black shadow-sm">
-            <Sparkles className="w-4 h-4" />
+    <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden">
+      {/* Studio Agent Header */}
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-900 bg-black/70 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          {/* Agent Distinct Monogram Badge */}
+          <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-black font-mono font-black text-xs shadow-md">
+            <Compass className="w-4 h-4 text-black stroke-[2.2]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-white tracking-tight">AI Brand Architect</span>
-              <span className="flex h-2 w-2 rounded-full bg-emerald-400" />
+              <span className="text-sm font-bold text-white tracking-tight">
+                Brand Architect
+              </span>
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-neutral-900 border border-neutral-800 text-neutral-300">
+                GPT-4o
+              </span>
             </div>
             <p className="text-[11px] text-neutral-400 font-mono">
-              {context.brandName ? `Designing for: ${context.brandName}` : "Interactive Logo Generation"}
+              {context.brandName ? `Active Brand: ${context.brandName}` : "Conversational Design Engine"}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={handleRestart}
-          title="Start fresh conversation"
-          className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-neutral-800 hover:border-neutral-700 transition-colors cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>New Chat</span>
-        </button>
+        {context.brandName && (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900/80 border border-neutral-800 text-[11px] font-mono text-neutral-300">
+            <Layers className="w-3 h-3 text-neutral-400" />
+            <span className="capitalize">{context.style || "Minimal"}</span>
+          </div>
+        )}
       </div>
 
-      {/* Messages Scroll View */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin scrollbar-thumb-neutral-800">
+      {/* Messages Scroll Area */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin scrollbar-thumb-neutral-800">
         <AnimatePresence initial={false}>
           {messages.map((msg) => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25 }}
-              className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              transition={{ duration: 0.2 }}
+              className={`flex gap-3 items-start ${
+                msg.role === "user" ? "justify-end" : "justify-start"
+              }`}
             >
+              {/* Agent Avatar */}
               {msg.role === "assistant" && (
-                <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0 mt-0.5">
-                  <Bot className="w-3.5 h-3.5" />
+                <div className="w-8 h-8 rounded-xl bg-black border border-neutral-800 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-sm">
+                  <Compass className="w-4 h-4 text-neutral-200 stroke-[2]" />
                 </div>
               )}
 
               <div
-                className={`max-w-[82%] rounded-2xl px-4 py-3 text-xs sm:text-sm leading-relaxed ${
+                className={`max-w-[82%] rounded-2xl px-4 py-3.5 text-xs sm:text-sm leading-relaxed ${
                   msg.role === "user"
-                    ? "bg-white text-black font-medium"
-                    : "bg-black border border-neutral-900 text-neutral-200"
+                    ? "bg-white text-black font-medium shadow-md"
+                    : "bg-black border border-neutral-900 text-neutral-200 shadow-sm"
                 }`}
               >
-                {/* Markdown text rendering */}
+                {/* Message Body */}
                 <div className="whitespace-pre-wrap space-y-2">{msg.content}</div>
 
-                {/* Inline Generated Logo Card if returned */}
+                {/* Inline Generated Logo Card */}
                 {msg.generatedLogo && (
-                  <div className="mt-3 pt-3 border-t border-neutral-800">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0">
+                  <div className="mt-3.5 pt-3.5 border-t border-neutral-800">
+                    <div className="flex items-center gap-3 bg-neutral-950 p-2.5 rounded-xl border border-neutral-800">
+                      <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-neutral-700 bg-black shrink-0">
                         <Image
                           src={msg.generatedLogo.imageUrl}
                           alt={msg.generatedLogo.brandName}
@@ -208,18 +256,21 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-xs text-white truncate">
-                          {msg.generatedLogo.brandName}
-                        </p>
-                        <p className="text-[11px] text-neutral-400 capitalize">
-                          {msg.generatedLogo.style.replace("-", " ")} Style
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                          <p className="font-bold text-xs text-white truncate">
+                            {msg.generatedLogo.brandName}
+                          </p>
+                        </div>
+                        <p className="text-[11px] text-neutral-400 capitalize mt-0.5">
+                          {msg.generatedLogo.style.replace("-", " ")} Mark
                         </p>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Clickable Quick Options Chips */}
+                {/* Quick Action Chips */}
                 {msg.quickOptions && msg.quickOptions.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-neutral-800/80 flex flex-wrap gap-1.5">
                     {msg.quickOptions.map((opt, idx) => (
@@ -227,38 +278,39 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
                         key={idx}
                         onClick={() => sendMessage(opt.value)}
                         disabled={isThinking}
-                        className="text-xs px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        className="text-xs px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <span>{opt.label}</span>
-                        <ArrowRight className="w-2.5 h-2.5 text-neutral-500" />
+                        <ArrowRight className="w-3 h-3 text-neutral-500" />
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
+              {/* User Avatar */}
               {msg.role === "user" && (
-                <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-black shrink-0 mt-0.5">
-                  <User className="w-3.5 h-3.5" />
+                <div className="w-8 h-8 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0 mt-0.5 font-mono text-[10px] font-bold">
+                  YOU
                 </div>
               )}
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Thinking Indicator */}
+        {/* Architect Reasoning Indicator */}
         {isThinking && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex gap-3 items-center text-neutral-400 text-xs"
           >
-            <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white shrink-0">
-              <Bot className="w-3.5 h-3.5" />
+            <div className="w-8 h-8 rounded-xl bg-black border border-neutral-800 flex items-center justify-center text-white shrink-0">
+              <Compass className="w-4 h-4 text-neutral-400 animate-spin" />
             </div>
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black border border-neutral-900">
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-black border border-neutral-900">
               <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span>Architect is crafting your concept...</span>
+              <span>Architect is analyzing requirements & synthesizing concepts...</span>
             </div>
           </motion.div>
         )}
@@ -266,7 +318,7 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form Bar */}
+      {/* Input Bar */}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -278,7 +330,7 @@ export function AgentChat({ onLogoGenerated }: AgentChatProps) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Reply to the Architect or describe your vision..."
+          placeholder="Describe your brand, industry, or visual direction..."
           disabled={isThinking}
           className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-white transition-colors"
         />

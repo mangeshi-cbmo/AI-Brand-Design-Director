@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { Download, Sparkles, Copy, Check, Eye, Edit3 } from "lucide-react";
+import { Download, Copy, Check, Eye, Edit3, Compass } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,10 +44,10 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
           <div>
             <CardTitle className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-white" />
-              Preview
+              Live Preview
             </CardTitle>
             <CardDescription>
-              {logo ? `Rendered for ${logo.brandName}` : "Generated visual preview"}
+              {logo ? `Rendered for ${logo.brandName}` : "Generated visual mark"}
             </CardDescription>
           </div>
           {logo && (
@@ -73,7 +73,7 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
             <div className="flex flex-col items-center gap-3 text-center px-4">
               <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
               <p className="text-sm font-medium text-white">Synthesizing logo mark...</p>
-              <p className="text-xs text-neutral-500">Vector layout & typography</p>
+              <p className="text-xs text-neutral-500">Vector layout & geometry</p>
             </div>
           ) : logo ? (
             <div className="relative w-full h-full flex items-center justify-center p-6">
@@ -89,11 +89,11 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
           ) : (
             <div className="text-center px-6 py-12">
               <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mx-auto mb-3 text-neutral-400">
-                <Sparkles className="w-5 h-5" />
+                <Compass className="w-5 h-5 text-neutral-400" />
               </div>
-              <h4 className="text-sm font-semibold text-neutral-300">Ready to create</h4>
+              <h4 className="text-sm font-semibold text-neutral-300">Ready to synthesize</h4>
               <p className="text-xs text-neutral-500 mt-1 max-w-[200px] mx-auto">
-                Fill in your brand parameters to generate.
+                Chat with the Architect to generate your brand emblem.
               </p>
             </div>
           )}

@@ -118,4 +118,12 @@ export class ConversationService {
     await connectDB();
     return ConversationModel.findOne({ sessionId }).lean();
   }
+
+  /**
+   * Delete a conversation by sessionId and userId
+   */
+  static async deleteConversation(sessionId: string, userId: string) {
+    await connectDB();
+    return ConversationModel.findOneAndDelete({ sessionId, userId });
+  }
 }
