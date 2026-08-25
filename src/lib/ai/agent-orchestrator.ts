@@ -4,12 +4,14 @@ import { LogoService } from "@/services/logo.service";
 import { GeneratedLogo, LogoStyle, ColorPalette } from "@/types/logo";
 import { QuickOption } from "@/types/chat";
 
-const openai = new OpenAI({
-  apiKey:
+function getOpenAIClient(): OpenAI {
+  const apiKey =
     process.env.OPENAI_API_KEY ||
     process.env.AI_API_KEY ||
-    "",
-});
+    "dummy-key-for-build";
+
+  return new OpenAI({ apiKey });
+}
 
 export interface AgentContext {
   brandName?: string;
@@ -37,6 +39,7 @@ export class AgentOrchestrator {
     userEmail?: string
   ): Promise<AgentOrchestrationResult> {
     const trimmedInput = userMessage.trim();
+    const openai = getOpenAIClient();
 
     // 1. Construct conversational reasoning prompt for GPT-4o
     const systemPrompt = `You are "LogoForge AI Architect", an elite commercial brand identity director and graphic designer.

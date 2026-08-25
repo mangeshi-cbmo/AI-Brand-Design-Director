@@ -1,12 +1,14 @@
 import OpenAI from "openai";
 import { AIImageGenerationRequest, AIImageGenerationResponse } from "@/types/ai";
 
-const openai = new OpenAI({
-  apiKey:
+function getOpenAIClient(): OpenAI {
+  const apiKey =
     process.env.OPENAI_API_KEY ||
     process.env.AI_API_KEY ||
-    "",
-});
+    "dummy-key-for-build";
+
+  return new OpenAI({ apiKey });
+}
 
 export interface IAIService {
   generateImage(request: AIImageGenerationRequest): Promise<AIImageGenerationResponse>;
@@ -17,6 +19,7 @@ export interface IAIService {
  */
 class OpenAIService implements IAIService {
   async generateImage(request: AIImageGenerationRequest): Promise<AIImageGenerationResponse> {
+    const openai = getOpenAIClient();
     const response = await openai.images.generate({
       model: "gpt-image-1",
       prompt: request.prompt,

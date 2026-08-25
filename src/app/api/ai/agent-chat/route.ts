@@ -3,6 +3,8 @@ import { AgentOrchestrator, AgentContext } from "@/lib/ai/agent-orchestrator";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 
+export const dynamic = "force-dynamic";
+
 interface ChatPayload {
   message: string;
   context: AgentContext;
