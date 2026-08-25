@@ -41,7 +41,7 @@ export class AgentOrchestrator {
     const trimmedInput = userMessage.trim();
     const openai = getOpenAIClient();
 
-    // 1. Construct conversational reasoning prompt for GPT-4o
+    // 1. Construct conversational reasoning prompt
     const systemPrompt = `You are "LogoForge AI Architect", an elite commercial brand identity director and graphic designer.
 Your task is to converse with a founder/client, gather their brand details, and guide them to craft a world-class logo mark.
 
@@ -55,10 +55,11 @@ Instructions:
 4. If brandName, industry, and style are known OR the user explicitly requests to generate/refine, set "shouldGenerateLogo": true.
 5. Provide 3-5 concise, clickable quick options for the user to tap.
 6. When refining an existing logo, explain what artistic improvements you made.
+7. NEVER use double asterisks or markdown bold stars (like **text**). Write clean, natural plain text without any asterisks.
 
 Respond strictly in JSON matching this schema:
 {
-  "assistantMessage": "Your conversational response in markdown",
+  "assistantMessage": "Your conversational response in plain text without any double asterisks",
   "updatedContext": {
     "brandName": string or null,
     "industry": string or null,
@@ -111,6 +112,14 @@ Respond strictly in JSON matching this schema:
       };
     }
 
+    // Sanitize assistant message to guarantee zero double asterisks
+    if (parsedResponse.assistantMessage) {
+      parsedResponse.assistantMessage = parsedResponse.assistantMessage
+        .replace(/\*\*/g, "")
+        .replace(/\*/g, "")
+        .trim();
+    }
+
     const updatedCtx: AgentContext = {
       ...context,
       ...parsedResponse.updatedContext,
@@ -147,13 +156,12 @@ Respond strictly in JSON matching this schema:
         }
       } catch (imageError) {
         console.error("OpenAI Image Generation Error:", imageError);
-        // Fallback placeholder image
         imageUrl = `https://placehold.co/800x800/000000/ffffff?text=${encodeURIComponent(
           updatedCtx.brandName
         )}+Logo`;
       }
 
-      // 3. Save to MongoDB Atlas 'logo' database
+      // 3. Save to MongoDB Atlas 'agent_brand_db' database
       if (imageUrl) {
         generatedLogo = await LogoService.saveLogo(
           {

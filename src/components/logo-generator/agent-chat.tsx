@@ -41,7 +41,7 @@ export function AgentChat({
     {
       id: "initial-msg",
       role: "assistant",
-      content: "Hi! Let's craft your logo mark.\n\n**What is the name of your brand or company?**",
+      content: "Hi! Let's craft your logo mark.\n\nWhat is the name of your brand or company?",
       timestamp: new Date(),
       quickOptions: [
         { label: "Acme AI", value: "Acme AI" },
@@ -312,7 +312,7 @@ export function AgentChat({
 
                   {/* Main Response Typography */}
                   <div className="text-neutral-200 text-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
+                    {msg.content.replace(/\*\*/g, "").replace(/\*/g, "")}
                   </div>
 
                   {/* Inline Generated Logo Card if available */}
