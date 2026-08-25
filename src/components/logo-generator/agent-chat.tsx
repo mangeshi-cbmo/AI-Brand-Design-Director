@@ -8,34 +8,123 @@ import {
   Compass,
   ArrowRight,
   Check,
-  CheckCircle2,
-  Terminal,
-  Layers,
+  Copy,
+  Download,
+  Edit3,
   Sparkles,
-  Activity,
-  Cpu,
-  Sliders,
 } from "lucide-react";
 import { ChatMessage, QuickOption } from "@/types/chat";
-import { GeneratedLogo } from "@/types/logo";
+import { ColorPalette, GeneratedLogo, LogoStyle } from "@/types/logo";
+
+/* Shape of messages returned by /api/ai/agent-chat */
+interface ServerMessage {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  createdAt: string;
+  quickOptions?: QuickOption[];
+  logoData?: {
+    logoId?: string;
+    imageUrl: string;
+    brandName?: string;
+    style?: string;
+    promptUsed?: string;
+  };
+}
 
 interface AgentChatProps {
   sessionId: string;
   onLogoGenerated: (logo: GeneratedLogo) => void;
   onSessionUpdated?: () => void;
+  onOpenEditor?: () => void;
 }
 
 const THINKING_STEPS = [
-  "Analyzing brand requirements...",
-  "Working on typography & visual balance...",
-  "Creating geometric mark tokens...",
-  "Synthesizing high-res vector emblem...",
+  "Analyzing brand requirements",
+  "Balancing typography & geometry",
+  "Composing vector mark tokens",
+  "Synthesizing high-res emblem",
 ];
+
+import { PALETTE_SWATCHES } from "@/config/palettes";
+
+function PaletteDots({ palette, size = 3 }: { palette?: string; size?: number }) {
+  const colors = palette ? PALETTE_SWATCHES[palette] : undefined;
+  if (!colors) return null;
+  return (
+    <span className="inline-flex items-center -space-x-0.5">
+      {colors.map((c, i) => (
+        <span
+          key={i}
+          className="rounded-full ring-1 ring-black/60"
+          style={{ backgroundColor: c, width: size * 4, height: size * 4 }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/* Renders **bold** and "- " bullet lines without a markdown dependency */
+function RichText({ content }: { content: string }) {
+  const lines = content.split("\n");
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={i} className="h-1" />;
+
+        const isBullet = /^[-*•]\s+/.test(trimmed);
+        const text = isBullet ? trimmed.replace(/^[-*•]\s+/, "") : trimmed;
+        const parts = text.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+
+        const rendered = parts.map((part, j) =>
+          part.startsWith("**") && part.endsWith("**") ? (
+            <strong key={j} className="text-white font-semibold">
+              {part.slice(2, -2)}
+            </strong>
+          ) : (
+            <React.Fragment key={j}>{part.replace(/\*/g, "")}</React.Fragment>
+          )
+        );
+
+        if (isBullet) {
+          return (
+            <div key={i} className="flex items-start gap-2.5 pl-1">
+              <span className="mt-[7px] w-1 h-1 rounded-full bg-neutral-500 shrink-0" />
+              <span>{rendered}</span>
+            </div>
+          );
+        }
+        return <p key={i}>{rendered}</p>;
+      })}
+    </div>
+  );
+}
+
+/* Geometric monogram avatar for the Architect agent */
+function ArchitectAvatar({ pulsing = false }: { pulsing?: boolean }) {
+  return (
+    <div className="relative w-7 h-7 shrink-0">
+      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-neutral-800 to-black border border-neutral-700 flex items-center justify-center shadow-md">
+        <Compass className="w-3.5 h-3.5 text-neutral-200" />
+      </div>
+      <span
+        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black ${
+          pulsing ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+        }`}
+      />
+    </div>
+  );
+}
+
+const formatTime = (d: Date) =>
+  new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export function AgentChat({
   sessionId,
   onLogoGenerated,
   onSessionUpdated,
+  onOpenEditor,
 }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -55,6 +144,7 @@ export function AgentChat({
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingStepIdx, setThinkingStepIdx] = useState(0);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [context, setContext] = useState<{
     brandName?: string;
@@ -66,6 +156,12 @@ export function AgentChat({
   }>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idSeqRef = useRef(0);
+  const onLogoGeneratedRef = useRef(onLogoGenerated);
+  useEffect(() => {
+    onLogoGeneratedRef.current = onLogoGenerated;
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -75,15 +171,16 @@ export function AgentChat({
     scrollToBottom();
   }, [messages, isThinking]);
 
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [sessionId]);
+
   // Cycle thinking step words when thinking
   useEffect(() => {
-    if (!isThinking) {
-      setThinkingStepIdx(0);
-      return;
-    }
+    if (!isThinking) return;
     const interval = setInterval(() => {
-      setThinkingStepIdx((prev) => (prev + 1) % THINKING_STEPS.length);
-    }, 1800);
+      setThinkingStepIdx((prev) => Math.min(prev + 1, THINKING_STEPS.length - 1));
+    }, 2200);
     return () => clearInterval(interval);
   }, [isThinking]);
 
@@ -95,7 +192,8 @@ export function AgentChat({
         const res = await fetch(`/api/ai/agent-chat?sessionId=${sessionId}`);
         const data = await res.json();
         if (data.success && data.data && data.data.messages?.length > 0) {
-          const loadedMessages: ChatMessage[] = data.data.messages.map((m: any) => ({
+          const serverMessages = data.data.messages as ServerMessage[];
+          const loadedMessages: ChatMessage[] = serverMessages.map((m) => ({
             id: m.id,
             role: m.role,
             content: m.content,
@@ -103,14 +201,14 @@ export function AgentChat({
             quickOptions: m.quickOptions,
             generatedLogo: m.logoData
               ? {
-                  id: m.logoData.logoId || `logo-${Date.now()}`,
+                  id: m.logoData.logoId || `logo-${m.id}`,
                   imageUrl: m.logoData.imageUrl,
                   brandName: m.logoData.brandName || "Brand Logo",
-                  industry: data.data.brandContext?.industry || "General",
-                  style: (m.logoData.style as any) || "minimalist",
-                  colorPalette: (data.data.brandContext?.colorPalette as any) || "monochrome",
+                  style: (m.logoData.style as LogoStyle) || "minimalist",
+                  colorPalette:
+                    (data.data.brandContext?.colorPalette as ColorPalette) || "monochrome",
                   promptUsed: m.logoData.promptUsed || "",
-                  createdAt: new Date(m.createdAt).toISOString(),
+                  createdAt: new Date(m.createdAt),
                 }
               : undefined,
           }));
@@ -120,7 +218,7 @@ export function AgentChat({
 
           const lastLogo = loadedMessages.slice().reverse().find((m) => m.generatedLogo);
           if (lastLogo?.generatedLogo) {
-            onLogoGenerated(lastLogo.generatedLogo);
+            onLogoGeneratedRef.current(lastLogo.generatedLogo);
           }
         }
       } catch (err) {
@@ -136,8 +234,9 @@ export function AgentChat({
     if (!messageText || isThinking) return;
 
     // 1. Append user message
+    idSeqRef.current += 1;
     const userMsg: ChatMessage = {
-      id: `user_${Date.now()}`,
+      id: `user_${idSeqRef.current}`,
       role: "user",
       content: messageText,
       timestamp: new Date(),
@@ -145,6 +244,7 @@ export function AgentChat({
 
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setThinkingStepIdx(0);
     setIsThinking(true);
 
     try {
@@ -171,8 +271,9 @@ export function AgentChat({
         onLogoGenerated(generatedLogo);
       }
 
+      idSeqRef.current += 1;
       const assistantMsg: ChatMessage = {
-        id: `assistant_${Date.now()}`,
+        id: `assistant_${idSeqRef.current}`,
         role: "assistant",
         content: message,
         timestamp: new Date(),
@@ -187,8 +288,9 @@ export function AgentChat({
       }
     } catch (err) {
       console.error(err);
+      idSeqRef.current += 1;
       const errorMsg: ChatMessage = {
-        id: `error_${Date.now()}`,
+        id: `error_${idSeqRef.current}`,
         role: "assistant",
         content: "I encountered a processing error. Please retry or adjust your requirements.",
         timestamp: new Date(),
@@ -199,190 +301,313 @@ export function AgentChat({
     }
   };
 
+  const handleCopyMessage = (msg: ChatMessage) => {
+    navigator.clipboard.writeText(msg.content.replace(/\*\*/g, ""));
+    setCopiedId(msg.id);
+    setTimeout(() => setCopiedId(null), 1600);
+  };
+
+  const handleDownloadLogo = (logo: GeneratedLogo) => {
+    const a = document.createElement("a");
+    a.href = logo.imageUrl;
+    a.download = `${logo.brandName.toLowerCase().replace(/\s+/g, "-")}-logo.png`;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  /* Spec pipeline: which brand parameters have been collected */
+  const specSteps = [
+    { label: "Brand", value: context.brandName },
+    { label: "Industry", value: context.industry },
+    { label: "Style", value: context.style },
+    { label: "Palette", value: context.colorPalette },
+  ];
+  const specDone = specSteps.filter((s) => s.value).length;
+
+  const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+
   return (
     <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden font-sans">
-      {/* Sleek Agent Activity Header */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-900 bg-[#0d0d0d]">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-neutral-200 tracking-wide font-mono">
-              agent:brand-architect
-            </span>
+      {/* Agent Activity Header */}
+      <div className="border-b border-neutral-900 bg-[#0d0d0d]">
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-3">
+            <ArchitectAvatar pulsing={isThinking} />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-neutral-100 tracking-wide font-mono">
+                  agent:brand-architect
+                </span>
+                <span
+                  className={`text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-md border ${
+                    isThinking
+                      ? "text-amber-300 border-amber-400/20 bg-amber-400/5"
+                      : "text-emerald-300 border-emerald-400/20 bg-emerald-400/5"
+                  }`}
+                >
+                  {isThinking ? "working" : "online"}
+                </span>
+              </div>
+              {context.brandName ? (
+                <p className="text-[11px] text-neutral-500 font-mono mt-0.5 flex items-center gap-1.5">
+                  {context.brandName.toLowerCase().replace(/\s+/g, "-")}
+                  {context.colorPalette && <PaletteDots palette={context.colorPalette} size={2} />}
+                </p>
+              ) : (
+                <p className="text-[11px] text-neutral-500 font-mono mt-0.5">
+                  conversational identity design
+                </p>
+              )}
+            </div>
           </div>
-          {context.brandName && (
-            <span className="text-[11px] text-neutral-500 font-mono hidden sm:inline">
-              &bull; session: {context.brandName.toLowerCase().replace(/\s+/g, "-")}
-            </span>
-          )}
-        </div>
 
-        {context.brandName && (
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-neutral-900 border border-neutral-800 text-[11px] font-mono text-neutral-300">
-            <span className="text-neutral-500">style:</span>
-            <span className="capitalize">{context.style || "Minimal"}</span>
+          {/* Spec collection progress */}
+          <div className="hidden sm:flex items-center gap-2.5">
+            <div className="flex items-center gap-1">
+              {specSteps.map((s) => (
+                <span
+                  key={s.label}
+                  title={`${s.label}${s.value ? `: ${s.value}` : " — pending"}`}
+                  className={`h-1 w-6 rounded-full transition-colors ${
+                    s.value ? "bg-white" : "bg-neutral-800"
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-[10px] font-mono text-neutral-500">{specDone}/4 spec</span>
           </div>
-        )}
+        </div>
+        {/* Gradient hairline */}
+        <div className="h-px bg-gradient-to-r from-transparent via-neutral-700/60 to-transparent" />
       </div>
 
       {/* Messages Viewport */}
-      <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 scrollbar-thin scrollbar-thumb-neutral-800">
+      <div className="chat-scroll flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
         <AnimatePresence initial={false}>
-          {messages.map((msg, index) => (
+          {messages.map((msg) => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
               className="space-y-4"
             >
-              {/* USER MESSAGE: Modern Dark Capsule */}
               {msg.role === "user" ? (
-                <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl px-4 py-2.5 bg-[#1f1f1f] border border-neutral-800 text-neutral-100 text-sm font-normal shadow-sm">
+                /* USER MESSAGE */
+                <div className="flex flex-col items-end gap-1">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 bg-gradient-to-b from-[#242424] to-[#1b1b1b] border border-neutral-800 text-neutral-100 text-sm shadow-md">
                     {msg.content}
                   </div>
+                  <span className="text-[9px] font-mono text-neutral-700 pr-1">
+                    {formatTime(msg.timestamp)}
+                  </span>
                 </div>
               ) : (
-                /* ASSISTANT MESSAGE: Dynamic Agent Action Card */
-                <div className="space-y-3">
-                  {/* Dynamic Action & State Card (No brand.spec.json text) */}
-                  {index > 0 && context.brandName && (
-                    <div className="rounded-xl border border-neutral-800/80 bg-[#111111] overflow-hidden text-xs font-mono shadow-inner">
-                      {/* Card Dynamic Action Bar */}
-                      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800/80 bg-[#141414] text-[11px] text-neutral-400">
-                        <div className="flex items-center gap-2">
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <Activity className="w-3.5 h-3.5 text-neutral-400" />
-                          <span className="text-neutral-200 font-medium">
-                            {msg.generatedLogo
-                              ? "Creating & Synthesizing Emblem"
-                              : "Analyzing & Formulating Parameters"}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          Synchronized
-                        </span>
-                      </div>
+                /* ASSISTANT MESSAGE */
+                <div className="flex gap-3">
+                  <ArchitectAvatar />
+                  <div className="flex-1 min-w-0 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-neutral-300">Architect</span>
+                      <span className="text-[9px] font-mono text-neutral-700">
+                        {formatTime(msg.timestamp)}
+                      </span>
+                      <button
+                        onClick={() => handleCopyMessage(msg)}
+                        title="Copy message"
+                        className="opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100 p-0.5 text-neutral-600 hover:text-neutral-300 transition-all cursor-pointer"
+                      >
+                        {copiedId === msg.id ? (
+                          <Check className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
 
-                      {/* Code Block with Line Numbers & Interactive Values */}
-                      <div className="p-3 bg-[#0d0d0d] font-mono text-[11px] leading-relaxed text-neutral-300">
-                        <div className="flex gap-3">
-                          <span className="text-neutral-600 select-none">01</span>
-                          <span>
-                            <span className="text-neutral-400">brand:</span>{" "}
-                            <span className="text-white font-semibold">&quot;{context.brandName}&quot;</span>
-                          </span>
-                        </div>
-                        <div className="flex gap-3">
-                          <span className="text-neutral-600 select-none">02</span>
-                          <span>
-                            <span className="text-neutral-400">industry:</span>{" "}
-                            <span className="text-neutral-200">&quot;{context.industry || "Technology"}&quot;</span>
-                          </span>
-                        </div>
-                        <div className="flex gap-3">
-                          <span className="text-neutral-600 select-none">03</span>
-                          <span>
-                            <span className="text-neutral-400">style:</span>{" "}
-                            <span className="text-emerald-400 font-medium">&quot;{context.style || "minimalist"}&quot;</span>
-                          </span>
-                        </div>
-                        {context.colorPalette && (
-                          <div className="flex gap-3">
-                            <span className="text-neutral-600 select-none">04</span>
-                            <span>
-                              <span className="text-neutral-400">palette:</span>{" "}
-                              <span className="text-neutral-300">&quot;{context.colorPalette}&quot;</span>
+                    {/* Brand spec card — shown on the latest agent reply once params exist */}
+                    {msg.id === lastAssistantId && context.brandName && (
+                      <div className="rounded-xl border border-neutral-800/80 bg-[#101010] overflow-hidden text-xs font-mono">
+                        <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800/80 bg-[#151515]">
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="flex gap-1">
+                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
+                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
+                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
+                            </span>
+                            <span className="text-neutral-300 font-medium ml-1">
+                              brand.spec
                             </span>
                           </div>
-                        )}
-                      </div>
-
-                      <div className="px-3.5 py-1.5 border-t border-neutral-900 bg-[#0d0d0d] text-[10px] text-neutral-500 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                          <span>Working on visual mark synthesis</span>
+                          <span className="text-[10px] text-emerald-400 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            {specDone}/4 resolved
+                          </span>
                         </div>
-                        <span className="text-neutral-600 font-mono">active state</span>
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Main Response Typography */}
-                  <div className="text-neutral-200 text-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content.replace(/\*\*/g, "").replace(/\*/g, "")}
+                        <div className="p-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5 text-[11px]">
+                          {specSteps.map((s, i) => (
+                            <div key={s.label} className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
+                                  s.value
+                                    ? "border-neutral-600 bg-neutral-800"
+                                    : "border-neutral-800 bg-transparent"
+                                }`}
+                              >
+                                {s.value ? (
+                                  <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                ) : (
+                                  <span className="text-[8px] text-neutral-600">{i + 1}</span>
+                                )}
+                              </span>
+                              <span className="text-neutral-500 shrink-0">{s.label.toLowerCase()}:</span>
+                              {s.label === "Palette" && s.value ? (
+                                <span className="flex items-center gap-1.5 truncate text-neutral-200">
+                                  <PaletteDots palette={s.value} size={2} />
+                                  <span className="truncate">{s.value}</span>
+                                </span>
+                              ) : (
+                                <span
+                                  className={`truncate ${
+                                    s.value ? "text-white font-medium" : "text-neutral-700 italic"
+                                  }`}
+                                >
+                                  {s.value || "pending"}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Response body */}
+                    <div className="text-neutral-200 text-sm leading-relaxed">
+                      <RichText content={msg.content} />
+                    </div>
+
+                    {/* Generated logo card */}
+                    {msg.generatedLogo && (
+                      <div className="rounded-xl border border-neutral-800 bg-gradient-to-b from-[#131313] to-[#0d0d0d] p-3.5">
+                        <div className="flex items-center gap-4">
+                          <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-700 shrink-0 bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px]">
+                            <Image
+                              src={msg.generatedLogo.imageUrl}
+                              alt={msg.generatedLogo.brandName}
+                              fill
+                              unoptimized
+                              className="object-contain p-1.5"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
+                              <p className="font-semibold text-sm text-white truncate">
+                                {msg.generatedLogo.brandName}
+                              </p>
+                            </div>
+                            <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
+                              {msg.generatedLogo.style.replace(/-/g, " ")} emblem synthesized
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-2.5">
+                              {onOpenEditor && (
+                                <button
+                                  onClick={onOpenEditor}
+                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                  Open in Editor
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDownloadLogo(msg.generatedLogo!)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 text-[11px] hover:bg-neutral-900 hover:text-white transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                PNG
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick option chips */}
+                    {msg.quickOptions && msg.quickOptions.length > 0 && (
+                      <div className="pt-1 flex flex-wrap gap-1.5">
+                        {msg.quickOptions.map((opt: QuickOption, idx: number) => (
+                          <motion.button
+                            key={idx}
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.08 * idx, duration: 0.2 }}
+                            onClick={() => sendMessage(opt.value)}
+                            disabled={isThinking}
+                            title={opt.description}
+                            className="group text-xs px-3 py-1.5 rounded-xl border border-neutral-800 bg-[#141414] hover:bg-white hover:text-black hover:border-white text-neutral-300 transition-all duration-150 flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
+                          >
+                            <span>{opt.label}</span>
+                            <ArrowRight className="w-3 h-3 text-neutral-500 group-hover:text-black group-hover:translate-x-0.5 transition-all" />
+                          </motion.button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Inline Generated Logo Card if available */}
-                  {msg.generatedLogo && (
-                    <div className="mt-3 rounded-xl border border-neutral-800 bg-[#121212] p-3 flex items-center gap-3.5">
-                      <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-neutral-700 bg-black shrink-0">
-                        <Image
-                          src={msg.generatedLogo.imageUrl}
-                          alt={msg.generatedLogo.brandName}
-                          fill
-                          unoptimized
-                          className="object-contain"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                          <p className="font-semibold text-xs text-white truncate">
-                            {msg.generatedLogo.brandName}
-                          </p>
-                        </div>
-                        <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
-                          {msg.generatedLogo.style.replace("-", " ")} emblem synthesized
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick Action Suggestion Chips */}
-                  {msg.quickOptions && msg.quickOptions.length > 0 && (
-                    <div className="pt-2 flex flex-wrap gap-1.5">
-                      {msg.quickOptions.map((opt, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => sendMessage(opt.value)}
-                          disabled={isThinking}
-                          className="text-xs px-3 py-1.5 rounded-xl border border-neutral-800 bg-[#141414] hover:bg-neutral-800 hover:border-neutral-700 text-neutral-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          <span>{opt.label}</span>
-                          <ArrowRight className="w-3 h-3 text-neutral-500" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </motion.div>
           ))}
         </AnimatePresence>
 
-        {/* Live Dynamic Action / Working State */}
+        {/* Live thinking state */}
         {isThinking && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-2 text-xs font-mono"
+            className="flex gap-3"
           >
-            <div className="flex items-center gap-2.5 text-neutral-200 bg-[#121212] border border-neutral-800 rounded-xl px-3.5 py-2.5">
-              <div className="w-3.5 h-3.5 rounded-full border-2 border-neutral-600 border-t-white animate-spin" />
-              <span className="font-medium">{THINKING_STEPS[thinkingStepIdx]}</span>
-            </div>
-
-            <div className="pl-3 space-y-1 text-[11px] text-neutral-500">
-              <div className="flex items-center gap-2">
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span>Analyzing brand context & market sector</span>
+            <ArchitectAvatar pulsing />
+            <div className="flex-1 space-y-2.5">
+              <div className="inline-flex items-center gap-3 bg-[#111111] border border-neutral-800 rounded-xl px-4 py-2.5">
+                <span className="flex items-center gap-1">
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
+                </span>
+                <span className="text-shimmer text-xs font-mono font-medium">
+                  {THINKING_STEPS[thinkingStepIdx]}...
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse ml-0.5 mr-1" />
-                <span>Working on vector prompt composition & geometry</span>
+
+              <div className="pl-1 space-y-1.5 text-[11px] font-mono">
+                {THINKING_STEPS.map((step, i) => (
+                  <div
+                    key={step}
+                    className={`flex items-center gap-2 transition-colors ${
+                      i < thinkingStepIdx
+                        ? "text-neutral-400"
+                        : i === thinkingStepIdx
+                          ? "text-neutral-200"
+                          : "text-neutral-700"
+                    }`}
+                  >
+                    {i < thinkingStepIdx ? (
+                      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                    ) : i === thinkingStepIdx ? (
+                      <span className="w-3 h-3 flex items-center justify-center shrink-0">
+                        <span className="w-2.5 h-2.5 rounded-full border-2 border-neutral-600 border-t-white animate-spin" />
+                      </span>
+                    ) : (
+                      <span className="w-3 h-3 flex items-center justify-center shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-neutral-700" />
+                      </span>
+                    )}
+                    <span>{step}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>
@@ -391,32 +616,34 @@ export function AgentChat({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Modern Developer-Style Prompt Container */}
+      {/* Prompt Composer */}
       <div className="p-3.5 bg-[#0a0a0a] border-t border-neutral-900">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             sendMessage();
           }}
-          className="rounded-2xl border border-neutral-800 bg-[#121212] p-3 transition-colors focus-within:border-neutral-700"
+          className="rounded-2xl border border-neutral-800 bg-[#111111] p-3 transition-all duration-200 focus-within:border-neutral-600 focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.04)]"
         >
-          {/* Main Input Textarea/Field */}
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Send follow-up or describe your brand direction..."
+            placeholder="Describe your brand direction..."
             disabled={isThinking}
-            className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 focus:outline-none"
+            className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none"
           />
 
-          {/* Bottom Action Row */}
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-neutral-800/60">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1a1a1a] border border-neutral-800 text-[11px] font-mono text-neutral-300">
                 <Compass className="w-3 h-3 text-neutral-400" />
                 <span>Brand Architect</span>
               </div>
+              <span className="hidden sm:inline text-[10px] font-mono text-neutral-700">
+                Enter ↵ to send
+              </span>
             </div>
 
             <button
@@ -424,7 +651,7 @@ export function AgentChat({
               disabled={!input.trim() || isThinking}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                 input.trim() && !isThinking
-                  ? "bg-white text-black hover:bg-neutral-200 shadow-md"
+                  ? "bg-white text-black hover:bg-neutral-200 hover:scale-105 shadow-md"
                   : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
               }`}
             >

@@ -17,7 +17,7 @@ interface LogoCanvasProps {
 
 export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps) {
   const [copied, setCopied] = useState(false);
-  const [bgMode, setBgMode] = useState<"dark" | "light" | "grid">("dark");
+  const [bgMode] = useState<"dark" | "light" | "grid">("dark");
 
   const handleCopyPrompt = () => {
     if (!logo?.promptUsed) return;

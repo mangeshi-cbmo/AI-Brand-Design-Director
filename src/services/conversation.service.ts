@@ -23,7 +23,7 @@ export class ConversationService {
       conv = await ConversationModel.create({
         userId,
         sessionId,
-        title: "Brand Logo Session",
+        title: "New Logo Project",
         brandContext: {},
         messages: initialMessage
           ? [

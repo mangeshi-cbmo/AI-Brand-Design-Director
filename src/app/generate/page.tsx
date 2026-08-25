@@ -47,8 +47,28 @@ export default function GenerateStudioPage() {
   }, [status]);
 
   useEffect(() => {
-    fetchConversations();
+    const t = setTimeout(fetchConversations, 0);
+    return () => clearTimeout(t);
   }, [fetchConversations]);
+
+  // One-shot handoff from the gallery: open a saved logo directly in the editor
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const raw = sessionStorage.getItem("logoforge:open-logo");
+        if (!raw) return;
+        sessionStorage.removeItem("logoforge:open-logo");
+        const logo = JSON.parse(raw) as GeneratedLogo;
+        if (logo?.imageUrl) {
+          setCurrentLogo(logo);
+          setActiveView("editor");
+        }
+      } catch (err) {
+        console.error("Failed to open logo from gallery:", err);
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   // Start a new conversation
   const handleNewChat = () => {
@@ -115,7 +135,7 @@ export default function GenerateStudioPage() {
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              title="Show Sessions"
+              title="Show Projects"
               className="p-2 rounded-xl border border-neutral-800 bg-neutral-950 hover:bg-neutral-900 text-neutral-300 transition-colors cursor-pointer"
             >
               <PanelLeft className="w-4 h-4" />
@@ -189,6 +209,7 @@ export default function GenerateStudioPage() {
               sessionId={activeSessionId}
               onLogoGenerated={(logo) => setCurrentLogo(logo)}
               onSessionUpdated={fetchConversations}
+              onOpenEditor={() => setActiveView("editor")}
             />
           </div>
 

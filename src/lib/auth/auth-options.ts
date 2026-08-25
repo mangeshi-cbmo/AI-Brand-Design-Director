@@ -20,8 +20,13 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Verify with Google Authenticator TOTP
-        const isValid = verifyTOTPToken(email, code);
-        if (!isValid) {
+        const result = await verifyTOTPToken(email, code);
+        if (result === "not-registered") {
+          throw new Error(
+            "No authenticator is linked to this email yet. Go back and re-enter your email to set it up."
+          );
+        }
+        if (result !== "valid") {
           throw new Error("Invalid or expired 6-digit code. Please try again.");
         }
 

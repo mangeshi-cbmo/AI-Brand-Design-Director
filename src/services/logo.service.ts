@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db/client";
 import { LogoModel } from "@/lib/db/models/logo.model";
-import { GeneratedLogo, LogoGenerationParams } from "@/types/logo";
+import { ColorPalette, GeneratedLogo, LogoGenerationParams, LogoStyle } from "@/types/logo";
 
 export class LogoService {
   /**
@@ -16,8 +16,8 @@ export class LogoService {
         id: String(doc._id),
         brandName: doc.brandName,
         imageUrl: doc.imageUrl,
-        style: doc.style as any,
-        colorPalette: doc.colorPalette as any,
+        style: doc.style as LogoStyle,
+        colorPalette: doc.colorPalette as ColorPalette,
         promptUsed: doc.promptUsed,
         createdAt: new Date(doc.createdAt),
       }));
@@ -53,8 +53,8 @@ export class LogoService {
         id: String(newDoc._id),
         brandName: newDoc.brandName,
         imageUrl: newDoc.imageUrl,
-        style: newDoc.style as any,
-        colorPalette: newDoc.colorPalette as any,
+        style: newDoc.style as LogoStyle,
+        colorPalette: newDoc.colorPalette as ColorPalette,
         promptUsed: newDoc.promptUsed,
         createdAt: new Date(newDoc.createdAt),
       };
@@ -74,6 +74,23 @@ export class LogoService {
   }
 
   /**
+   * Delete a logo by ID, scoped to its owner so users can only
+   * remove their own marks.
+   */
+  static async deleteLogo(id: string, userEmail?: string): Promise<boolean> {
+    try {
+      await connectDB();
+      const filter: Record<string, unknown> = { _id: id };
+      if (userEmail) filter.userEmail = userEmail;
+      const res = await LogoModel.deleteOne(filter);
+      return res.deletedCount > 0;
+    } catch (error) {
+      console.error("Error deleting logo from MongoDB Atlas:", error);
+      return false;
+    }
+  }
+
+  /**
    * Get logo by ID
    */
   static async getLogoById(id: string): Promise<GeneratedLogo | null> {
@@ -85,8 +102,8 @@ export class LogoService {
         id: String(doc._id),
         brandName: doc.brandName,
         imageUrl: doc.imageUrl,
-        style: doc.style as any,
-        colorPalette: doc.colorPalette as any,
+        style: doc.style as LogoStyle,
+        colorPalette: doc.colorPalette as ColorPalette,
         promptUsed: doc.promptUsed,
         createdAt: new Date(doc.createdAt),
       };

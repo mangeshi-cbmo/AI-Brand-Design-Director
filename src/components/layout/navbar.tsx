@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { History, Layers, LogOut } from "lucide-react";
@@ -8,7 +9,7 @@ import { siteConfig } from "@/config/site";
 
 export function Navbar() {
   const pathname = usePathname();
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
 
   const handleLogout = async () => {
     // Clear next-auth session and any local storage
@@ -23,9 +24,16 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-neutral-900 bg-black/90 backdrop-blur-md">
       <div className="w-full flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href={user ? "/generate" : "/"} className="flex items-center gap-2.5 group">
-          <div className="w-7 h-7 rounded-lg bg-white flex items-center justify-center text-black font-extrabold text-sm tracking-tighter">
-            L
+        <Link href={user ? "/generate" : "/"} className="flex items-center gap-3 group">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center shrink-0">
+            <Image
+              src="/logo.jpeg"
+              alt={siteConfig.name}
+              width={32}
+              height={32}
+              priority
+              className="object-contain w-full h-full"
+            />
           </div>
           <span className="font-bold text-sm text-white tracking-tight">
             {siteConfig.name}
@@ -36,9 +44,8 @@ export function Navbar() {
           <nav className="flex items-center gap-3 sm:gap-6">
             <Link
               href="/generate"
-              className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                pathname === "/generate" ? "text-white" : "text-neutral-400 hover:text-white"
-              }`}
+              className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${pathname === "/generate" ? "text-white" : "text-neutral-400 hover:text-white"
+                }`}
             >
               <Layers className="w-3.5 h-3.5" />
               Studio
@@ -46,9 +53,8 @@ export function Navbar() {
 
             <Link
               href="/history"
-              className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
-                pathname === "/history" ? "text-white" : "text-neutral-400 hover:text-white"
-              }`}
+              className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${pathname === "/history" ? "text-white" : "text-neutral-400 hover:text-white"
+                }`}
             >
               <History className="w-3.5 h-3.5" />
               My Logos

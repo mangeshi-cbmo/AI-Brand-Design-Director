@@ -23,7 +23,7 @@ export interface ConversationSummary {
     industry?: string;
     style?: string;
   };
-  messages?: any[];
+  messages?: unknown[];
   updatedAt: string | Date;
 }
 
@@ -93,7 +93,7 @@ export function ChatSidebar({
             <Layers className="w-3.5 h-3.5" />
           </div>
           <span className="text-xs font-bold text-white uppercase tracking-wider">
-            Brand Sessions
+            Logo Projects
           </span>
         </div>
 
@@ -108,7 +108,7 @@ export function ChatSidebar({
         </div>
       </div>
 
-      {/* New Chat CTA Button */}
+      {/* New Project CTA Button */}
       <div className="p-3 border-b border-neutral-900/80">
         <button
           onClick={onNewChat}
@@ -116,7 +116,7 @@ export function ChatSidebar({
         >
           <div className="flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            <span>New Brand Chat</span>
+            <span>New Logo Project</span>
           </div>
           <ChevronRight className="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" />
         </button>
@@ -127,14 +127,14 @@ export function ChatSidebar({
         {isLoading ? (
           <div className="p-4 text-center text-xs text-neutral-500">
             <div className="w-4 h-4 border-2 border-neutral-500 border-t-white rounded-full animate-spin mx-auto mb-2" />
-            Loading conversations...
+            Loading projects...
           </div>
         ) : conversations.length === 0 ? (
           <div className="p-6 text-center text-xs text-neutral-500">
             <MessageSquare className="w-5 h-5 mx-auto mb-2 opacity-30" />
-            <p>No past sessions yet.</p>
+            <p>No logo projects yet.</p>
             <p className="text-[11px] text-neutral-600 mt-1">
-              Start a new chat to build your brand identity.
+              Start a new project to generate custom logo marks.
             </p>
           </div>
         ) : (
