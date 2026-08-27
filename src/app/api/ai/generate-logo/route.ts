@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     // 2. Engineer the prompt
     const engineeredPrompt = buildLogoPrompt(params);
 
-    // 3. Call AI Service Provider (Gemini / OpenAI / Mock)
+    // 3. Call AI Service Provider (Gemini / Mock)
     const aiService = getAIService();
     const aiResult = await aiService.generateImage({
       prompt: engineeredPrompt,

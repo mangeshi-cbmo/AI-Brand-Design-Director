@@ -1,4 +1,5 @@
 import { GeneratedLogo, LogoStyle, ColorPalette } from "./logo";
+import { BrandGuidelines } from "./brand";
 
 export type MessageRole = "assistant" | "user" | "system";
 
@@ -16,6 +17,9 @@ export interface ChatMessage {
   quickOptions?: QuickOption[];
   isThinking?: boolean;
   generatedLogo?: GeneratedLogo;
+  /** All concepts from this generation (the primary is generatedLogo) */
+  generatedLogos?: GeneratedLogo[];
+  brandGuidelines?: BrandGuidelines;
   collectedData?: {
     brandName?: string;
     industry?: string;

@@ -12,13 +12,15 @@ export class LogoService {
       const filter = userEmail ? { userEmail } : {};
       const docs = await LogoModel.find(filter).sort({ createdAt: -1 }).lean();
 
+      // Older documents can lack these fields — default them so the UI never
+      // receives undefined where GeneratedLogo promises a string.
       return docs.map((doc) => ({
         id: String(doc._id),
-        brandName: doc.brandName,
+        brandName: doc.brandName || "Brand Logo",
         imageUrl: doc.imageUrl,
-        style: doc.style as LogoStyle,
-        colorPalette: doc.colorPalette as ColorPalette,
-        promptUsed: doc.promptUsed,
+        style: (doc.style as LogoStyle) || "minimalist",
+        colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
+        promptUsed: doc.promptUsed || "",
         createdAt: new Date(doc.createdAt),
       }));
     } catch (error) {
@@ -62,7 +64,7 @@ export class LogoService {
       console.error("Error saving logo to MongoDB Atlas:", error);
       // Fallback in-memory object if DB network is unreachable
       return {
-        id: `logo_${Date.now()}`,
+        id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         brandName: params.brandName,
         imageUrl,
         style: params.style,
@@ -100,11 +102,11 @@ export class LogoService {
       if (!doc) return null;
       return {
         id: String(doc._id),
-        brandName: doc.brandName,
+        brandName: doc.brandName || "Brand Logo",
         imageUrl: doc.imageUrl,
-        style: doc.style as LogoStyle,
-        colorPalette: doc.colorPalette as ColorPalette,
-        promptUsed: doc.promptUsed,
+        style: (doc.style as LogoStyle) || "minimalist",
+        colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
+        promptUsed: doc.promptUsed || "",
         createdAt: new Date(doc.createdAt),
       };
     } catch (error) {

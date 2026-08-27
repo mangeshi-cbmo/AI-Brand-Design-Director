@@ -123,3 +123,46 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 📄 License
 MIT License &copy; 2026 LogoForge AI.
+
+---
+
+## ☁️ Deploy to Cloud Run (Production)
+
+Recommended production deployment using Cloud Build + Cloud Run and Secret Manager for secrets.
+
+Prerequisites:
+- Enable APIs: Cloud Build, Cloud Run, Secret Manager
+
+```bash
+gcloud services enable cloudbuild.googleapis.com run.googleapis.com secretmanager.googleapis.com
+```
+
+Create secrets in Secret Manager (example):
+
+```bash
+echo -n "your_mongo_uri" | gcloud secrets create MONGODB_URI --data-file=-
+echo -n "your_nextauth_secret" | gcloud secrets create NEXTAUTH_SECRET --data-file=-
+```
+
+Grant the Cloud Run service account access to secrets. Create a dedicated SA and grant access (recommended):
+
+```bash
+gcloud iam service-accounts create cloudrun-runner --display-name "Cloud Run Runner"
+gcloud projects add-iam-policy-binding $PROJECT_ID --member "serviceAccount:cloudrun-runner@$PROJECT_ID.iam.gserviceaccount.com" --role roles/run.admin
+gcloud secrets add-iam-policy-binding MONGODB_URI --member "serviceAccount:cloudrun-runner@$PROJECT_ID.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor
+gcloud secrets add-iam-policy-binding NEXTAUTH_SECRET --member "serviceAccount:cloudrun-runner@$PROJECT_ID.iam.gserviceaccount.com" --role roles/secretmanager.secretAccessor
+```
+
+Build and deploy with Cloud Build (the `cloudbuild.yaml` in the repo):
+
+```bash
+# from repo root
+gcloud builds submit --config cloudbuild.yaml \
+	--substitutions=REPO_NAME=logo-generator,_SERVICE_NAME=logo-generator,_REGION=us-central1,_SET_SECRETS="MONGODB_URI=MONGODB_URI:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest"
+```
+
+Notes:
+- The Cloud Build config builds a Docker image and runs `gcloud run deploy` with `--set-secrets` to map Secret Manager secrets to environment variables.
+- For stricter security, supply the `--service-account` flag to `gcloud run deploy` with the SA you created above.
+- The repo includes a `Dockerfile` optimized for production and `src/middleware.ts` which enforces basic rate limiting and security headers. For cross-instance rate limiting use Redis or Memorystore.
+

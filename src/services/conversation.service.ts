@@ -5,6 +5,7 @@ import {
   IMessage,
 } from "@/lib/db/models/conversation.model";
 import { AgentContext } from "@/lib/ai/agent-orchestrator";
+import { BrandGuidelines } from "@/types/brand";
 
 export class ConversationService {
   /**
@@ -58,7 +59,9 @@ export class ConversationService {
       brandName?: string;
       style?: string;
       promptUsed?: string;
-    }
+      variantLogoIds?: string[];
+    },
+    brandGuidelines?: BrandGuidelines
   ): Promise<IConversation | null> {
     await connectDB();
 
@@ -75,6 +78,7 @@ export class ConversationService {
       content: assistantMessageText,
       quickOptions,
       logoData,
+      brandGuidelines,
       createdAt: new Date(),
     };
 

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { BrandGuidelines } from "@/types/brand";
 
 export interface IMessage {
   id: string;
@@ -11,7 +12,10 @@ export interface IMessage {
     brandName?: string;
     style?: string;
     promptUsed?: string;
+    /** ids of every generated concept — images are hydrated from the logos collection */
+    variantLogoIds?: string[];
   };
+  brandGuidelines?: BrandGuidelines;
   createdAt: Date;
 }
 
@@ -54,7 +58,9 @@ const MessageSchema = new Schema<IMessage>(
       brandName: { type: String },
       style: { type: String },
       promptUsed: { type: String },
+      variantLogoIds: { type: [String], default: undefined },
     },
+    brandGuidelines: { type: Schema.Types.Mixed },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: false }

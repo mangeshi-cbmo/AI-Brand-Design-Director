@@ -30,7 +30,7 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
     if (!logo?.imageUrl) return;
     const a = document.createElement("a");
     a.href = logo.imageUrl;
-    a.download = `${logo.brandName.toLowerCase().replace(/\s+/g, "-")}-logo.png`;
+    a.download = `${(logo.brandName || "brand").toLowerCase().replace(/\s+/g, "-")}-logo.png`;
     a.target = "_blank";
     document.body.appendChild(a);
     a.click();
@@ -52,7 +52,7 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
           </div>
           {logo && (
             <Badge variant="white" className="capitalize">
-              {logo.style.replace("-", " ")}
+              {(logo.style || "custom").replace("-", " ")}
             </Badge>
           )}
         </div>
@@ -76,15 +76,20 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
               <p className="text-xs text-neutral-500">Vector layout & geometry</p>
             </div>
           ) : logo ? (
-            <div className="relative w-full h-full flex items-center justify-center p-6">
-              <Image
-                src={logo.imageUrl}
-                alt={logo.brandName}
-                width={360}
-                height={360}
-                unoptimized
-                className="object-contain rounded-xl"
-              />
+            <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 p-6">
+              <div className="relative flex-1 w-full min-h-0 flex items-center justify-center">
+                <Image
+                  src={logo.imageUrl}
+                  alt={logo.brandName}
+                  width={300}
+                  height={300}
+                  unoptimized
+                  className="object-contain max-h-full rounded-xl"
+                />
+              </div>
+              <p className="text-white font-bold text-lg uppercase tracking-[0.2em] text-center shrink-0">
+                {logo.brandName}
+              </p>
             </div>
           ) : (
             <div className="text-center px-6 py-12">
