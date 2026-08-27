@@ -3,19 +3,25 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { MessageSquare, Edit3, Compass, PanelLeft } from "lucide-react";
+import { MessageSquare, Edit3, Compass, PanelLeft, BookOpen } from "lucide-react";
 import { AgentChat } from "@/components/logo-generator/agent-chat";
 import { LogoCanvas } from "@/components/logo-generator/logo-canvas";
 import { LogoEditor } from "@/components/canvas-editor/logo-editor";
+import {
+  BrandGuidelinesDocument,
+  GuidelinesActions,
+} from "@/components/brand-kit/brand-guidelines";
 import { ChatSidebar, ConversationSummary } from "@/components/logo-generator/chat-sidebar";
 import { GeneratedLogo } from "@/types/logo";
+import { BrandGuidelines } from "@/types/brand";
 
 export default function GenerateStudioPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
 
   const [currentLogo, setCurrentLogo] = useState<GeneratedLogo | null>(null);
-  const [activeView, setActiveView] = useState<"studio" | "editor">("studio");
+  const [currentGuidelines, setCurrentGuidelines] = useState<BrandGuidelines | null>(null);
+  const [activeView, setActiveView] = useState<"studio" | "editor" | "guidelines">("studio");
 
   // Sidebar & session state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -75,6 +81,7 @@ export default function GenerateStudioPage() {
     const newSessionId = `session_${Date.now()}`;
     setActiveSessionId(newSessionId);
     setCurrentLogo(null);
+    setCurrentGuidelines(null);
     setActiveView("studio");
   };
 
@@ -145,12 +152,20 @@ export default function GenerateStudioPage() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
               <Compass className="w-5 h-5 text-white" />
-              <span>{activeView === "studio" ? "Brand Identity Studio" : "Canvas Editor"}</span>
+              <span>
+                {activeView === "studio"
+                  ? "Brand Identity Studio"
+                  : activeView === "editor"
+                    ? "Canvas Editor"
+                    : "Brand Guidelines"}
+              </span>
             </h1>
             <p className="text-xs text-neutral-400 mt-0.5">
               {activeView === "studio"
                 ? "Conversational Brand Architecture & Real-Time Mark Synthesis"
-                : "Vector Typography, Geometry Reshaping & High-Resolution Export"}
+                : activeView === "editor"
+                  ? "Vector Typography, Geometry Reshaping & High-Resolution Export"
+                  : "Identity System · Lockups, Palette, Typography & Usage Rules"}
             </p>
           </div>
         </div>
@@ -183,6 +198,21 @@ export default function GenerateStudioPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5" />
             )}
           </button>
+
+          <button
+            onClick={() => setActiveView("guidelines")}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              activeView === "guidelines"
+                ? "bg-white text-black font-semibold shadow-sm"
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Brand Kit</span>
+            {currentGuidelines && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5" />
+            )}
+          </button>
         </div>
       </div>
 
@@ -208,6 +238,7 @@ export default function GenerateStudioPage() {
               key={activeSessionId}
               sessionId={activeSessionId}
               onLogoGenerated={(logo) => setCurrentLogo(logo)}
+              onGuidelinesGenerated={(guidelines) => setCurrentGuidelines(guidelines)}
               onSessionUpdated={fetchConversations}
               onOpenEditor={() => setActiveView("editor")}
             />
@@ -222,13 +253,51 @@ export default function GenerateStudioPage() {
             />
           </div>
         </div>
-      ) : (
+      ) : activeView === "editor" ? (
         /* Full Canvas Editor View */
         <div className="w-full space-y-4">
           <LogoEditor
             logo={currentLogo}
             onClose={() => setActiveView("studio")}
           />
+        </div>
+      ) : (
+        /* Brand Guidelines View */
+        <div className="w-full flex-1">
+          {currentGuidelines ? (
+            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-900 bg-[#0d0d0d]">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {currentGuidelines.brandName} — Brand Guidelines
+                  </p>
+                  <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+                    Identity System · Fixed Template v1
+                  </p>
+                </div>
+                <GuidelinesActions guidelines={currentGuidelines} logo={currentLogo} />
+              </div>
+              <BrandGuidelinesDocument guidelines={currentGuidelines} logo={currentLogo} />
+            </div>
+          ) : (
+            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-[#0a0a0a] py-24 px-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mx-auto mb-4">
+                <BookOpen className="w-5 h-5 text-neutral-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-neutral-200">No brand guidelines yet</h3>
+              <p className="text-xs text-neutral-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                Generate a logo in the Studio Chat first — every generation produces 4 logo
+                concepts plus a complete brand guidelines document.
+              </p>
+              <button
+                onClick={() => setActiveView("studio")}
+                className="mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-black text-xs font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Open Studio Chat
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

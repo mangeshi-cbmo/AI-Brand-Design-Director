@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Run pure OpenAI Agent Orchestration reasoning loop
+    // 1. Run the Gemini-powered agent orchestration reasoning loop
     const result = await AgentOrchestrator.processMessage(
       userMessage,
       context,
@@ -52,8 +52,12 @@ export async function POST(req: NextRequest) {
               brandName: result.generatedLogo.brandName,
               style: result.generatedLogo.style,
               promptUsed: result.generatedLogo.promptUsed,
+              // ids only — variant images are hydrated from the logos
+              // collection on reload to keep conversation docs small
+              variantLogoIds: result.generatedLogos?.map((l) => l.id),
             }
-          : undefined
+          : undefined,
+        result.brandGuidelines
       );
     } catch (dbError) {
       console.error("Warning: Failed to persist conversation turn to DB:", dbError);
@@ -79,11 +83,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const sessionId = searchParams.get("sessionId");
+
   try {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.email || "guest_user";
-    const { searchParams } = new URL(req.url);
-    const sessionId = searchParams.get("sessionId");
 
     if (sessionId) {
       const conversation = await ConversationService.getConversationBySessionId(sessionId);
@@ -94,10 +99,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, data: conversations });
   } catch (error) {
     console.error("Error fetching conversations:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to fetch conversations" },
-      { status: 500 }
-    );
+    // Degrade gracefully when Atlas is unreachable — the chat itself works
+    // without persistence, so serve an empty history instead of a 500.
+    return NextResponse.json({
+      success: true,
+      data: sessionId ? null : [],
+      dbAvailable: false,
+    });
   }
 }
 

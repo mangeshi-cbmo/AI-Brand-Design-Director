@@ -1,17 +1,14 @@
-import OpenAI from "openai";
 import { buildLogoPrompt } from "./prompts";
+import { buildBrandGuidelines } from "./brand-guidelines";
+import { generateJson, generateLogoImages, GEMINI_IMAGE_MODEL } from "./gemini";
+import { stripBackground } from "./strip-background";
 import { LogoService } from "@/services/logo.service";
 import { GeneratedLogo, LogoStyle, ColorPalette } from "@/types/logo";
+import { BrandGuidelines } from "@/types/brand";
 import { QuickOption } from "@/types/chat";
 
-function getOpenAIClient(): OpenAI {
-  const apiKey =
-    process.env.OPENAI_API_KEY ||
-    process.env.AI_API_KEY ||
-    "dummy-key-for-build";
-
-  return new OpenAI({ apiKey });
-}
+/* How many distinct logo concepts each generation produces */
+const CONCEPT_COUNT = 4;
 
 export interface AgentContext {
   brandName?: string;
@@ -25,13 +22,19 @@ export interface AgentContext {
 export interface AgentOrchestrationResult {
   message: string;
   quickOptions?: QuickOption[];
+  /** Primary (first) concept — kept for backward compatibility */
   generatedLogo?: GeneratedLogo;
+  /** All generated concepts (CONCEPT_COUNT variations) */
+  generatedLogos?: GeneratedLogo[];
+  /** Fixed-template brand guidelines produced alongside the logos */
+  brandGuidelines?: BrandGuidelines;
   context: AgentContext;
 }
 
 export class AgentOrchestrator {
   /**
-   * Main conversational reasoning loop powered by OpenAI GPT-4o & OpenAI Image Models
+   * Main conversational reasoning loop powered by Google Gemini (via the
+   * GenAI SDK on Vertex AI) plus Google image models for the logo concepts.
    */
   static async processMessage(
     userMessage: string,
@@ -39,7 +42,6 @@ export class AgentOrchestrator {
     userEmail?: string
   ): Promise<AgentOrchestrationResult> {
     const trimmedInput = userMessage.trim();
-    const openai = getOpenAIClient();
 
     // 1. Construct conversational reasoning prompt
     const systemPrompt = `You are "LogoForge AI Architect", an elite commercial brand identity director and graphic designer.
@@ -55,6 +57,7 @@ Instructions:
 4. If brandName, industry, and style are known OR the user explicitly requests to generate/refine, set "shouldGenerateLogo": true.
 5. Provide 3-5 concise, clickable quick options for the user to tap.
 6. When refining an existing logo, explain what artistic improvements you made.
+6b. When "shouldGenerateLogo" is true, tell the user you are crafting 4 distinct logo concepts plus a complete brand guidelines document, and invite them to pick their favorite concept.
 7. NEVER use double asterisks or markdown bold stars (like **text**). Write clean, natural plain text without any asterisks.
 
 Respond strictly in JSON matching this schema:
@@ -82,20 +85,24 @@ Respond strictly in JSON matching this schema:
     };
 
     try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `User message: "${trimmedInput}"` },
-        ],
-        response_format: { type: "json_object" },
+      parsedResponse = await generateJson<typeof parsedResponse>({
+        system: systemPrompt,
+        user: `User message: "${trimmedInput}"`,
         temperature: 0.7,
       });
-
-      const rawJson = completion.choices[0]?.message?.content || "{}";
-      parsedResponse = JSON.parse(rawJson);
+      // Gemini can return an empty/blocked response, which generateJson turns
+      // into `{}` or `null` — route those through the same fallback path so
+      // the client never receives a message without text.
+      if (
+        !parsedResponse ||
+        typeof parsedResponse !== "object" ||
+        typeof parsedResponse.assistantMessage !== "string" ||
+        !parsedResponse.assistantMessage.trim()
+      ) {
+        throw new Error("Model response missing assistantMessage");
+      }
     } catch (llmError) {
-      console.error("OpenAI LLM Reasoning Error:", llmError);
+      console.error("Gemini LLM Reasoning Error:", llmError);
       parsedResponse = {
         assistantMessage: `I received your request for "${trimmedInput}". Let's craft your logo.`,
         updatedContext: {
@@ -125,63 +132,81 @@ Respond strictly in JSON matching this schema:
       ...parsedResponse.updatedContext,
     };
 
-    let generatedLogo: GeneratedLogo | undefined = undefined;
+    let generatedLogos: GeneratedLogo[] = [];
+    let brandGuidelines: BrandGuidelines | undefined = undefined;
 
     // 2. If the agent decided it's time to generate or refine the logo
     if (parsedResponse.shouldGenerateLogo && updatedCtx.brandName) {
-      const masterPrompt = buildLogoPrompt({
+      const generationParams = {
         brandName: updatedCtx.brandName,
         industry: updatedCtx.industry || "Technology",
-        style: updatedCtx.style || "minimalist",
-        colorPalette: updatedCtx.colorPalette || "monochrome",
+        style: (updatedCtx.style || "minimalist") as LogoStyle,
+        colorPalette: (updatedCtx.colorPalette || "monochrome") as ColorPalette,
         conceptDescription: updatedCtx.concept,
         slogan: updatedCtx.slogan,
-      });
+      };
+      const masterPrompt = buildLogoPrompt(generationParams);
 
-      let imageUrl = "";
+      let imageUrls: string[] = [];
 
       try {
-        console.log("Generating logo using OpenAI Image Model (gpt-image-1)...");
-        const imageGen = await openai.images.generate({
-          model: "gpt-image-1",
-          prompt: masterPrompt,
-          n: 1,
-        });
-
-        const item = imageGen.data?.[0];
-        if (item?.url) {
-          imageUrl = item.url;
-        } else if (item?.b64_json) {
-          imageUrl = `data:image/png;base64,${item.b64_json}`;
-        }
-      } catch (imageError) {
-        console.error("OpenAI Image Generation Error:", imageError);
-        imageUrl = `https://placehold.co/800x800/000000/ffffff?text=${encodeURIComponent(
-          updatedCtx.brandName
-        )}+Logo`;
-      }
-
-      // 3. Save to MongoDB Atlas 'agent_brand_db' database
-      if (imageUrl) {
-        generatedLogo = await LogoService.saveLogo(
-          {
-            brandName: updatedCtx.brandName,
-            industry: updatedCtx.industry || "General",
-            style: updatedCtx.style || "minimalist",
-            colorPalette: updatedCtx.colorPalette || "monochrome",
-            conceptDescription: updatedCtx.concept,
-          },
-          imageUrl,
-          masterPrompt,
-          userEmail
+        console.log(
+          `Generating ${CONCEPT_COUNT} icon-only logo concepts using Google image model (${GEMINI_IMAGE_MODEL})...`
         );
+        const rawImages = await generateLogoImages(masterPrompt, CONCEPT_COUNT);
+        // Google image models return opaque images — clear the flat
+        // background so the canvas editor gets transparent icon marks
+        imageUrls = await Promise.all(rawImages.map((url) => stripBackground(url)));
+      } catch (imageError) {
+        console.error("Google Image Generation Error:", imageError);
       }
+
+      if (imageUrls.length === 0) {
+        imageUrls = [
+          `https://placehold.co/800x800/000000/ffffff?text=${encodeURIComponent(
+            updatedCtx.brandName
+          )}+Logo`,
+        ];
+      }
+
+      // 3. Save every concept to MongoDB Atlas, plus the brand guidelines copy
+      const [savedLogos, guidelines] = await Promise.all([
+        Promise.all(
+          imageUrls.map((url) =>
+            LogoService.saveLogo(
+              {
+                brandName: generationParams.brandName,
+                industry: generationParams.industry,
+                style: generationParams.style,
+                colorPalette: generationParams.colorPalette,
+                conceptDescription: updatedCtx.concept,
+              },
+              url,
+              masterPrompt,
+              userEmail
+            )
+          )
+        ),
+        buildBrandGuidelines({
+          brandName: generationParams.brandName,
+          industry: generationParams.industry,
+          style: generationParams.style,
+          colorPalette: generationParams.colorPalette,
+          concept: updatedCtx.concept,
+          slogan: updatedCtx.slogan,
+        }),
+      ]);
+
+      generatedLogos = savedLogos;
+      brandGuidelines = guidelines;
     }
 
     return {
       message: parsedResponse.assistantMessage,
       quickOptions: parsedResponse.quickOptions,
-      generatedLogo,
+      generatedLogo: generatedLogos[0],
+      generatedLogos: generatedLogos.length > 0 ? generatedLogos : undefined,
+      brandGuidelines,
       context: updatedCtx,
     };
   }

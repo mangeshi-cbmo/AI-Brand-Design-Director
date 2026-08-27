@@ -1,33 +1,19 @@
-import OpenAI from "openai";
 import { AIImageGenerationRequest, AIImageGenerationResponse } from "@/types/ai";
-
-function getOpenAIClient(): OpenAI {
-  const apiKey =
-    process.env.OPENAI_API_KEY ||
-    process.env.AI_API_KEY ||
-    "dummy-key-for-build";
-
-  return new OpenAI({ apiKey });
-}
+import { generateLogoImages } from "./gemini";
+import { stripBackground } from "./strip-background";
 
 export interface IAIService {
   generateImage(request: AIImageGenerationRequest): Promise<AIImageGenerationResponse>;
 }
 
 /**
- * OpenAI Image Generation Provider (gpt-image-1 / dall-e)
+ * Google Gemini / Imagen image generation provider (via the GenAI SDK,
+ * authenticated through Vertex AI ADC or a Gemini API key)
  */
-class OpenAIService implements IAIService {
+class GeminiService implements IAIService {
   async generateImage(request: AIImageGenerationRequest): Promise<AIImageGenerationResponse> {
-    const openai = getOpenAIClient();
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: request.prompt,
-      n: 1,
-    });
-
-    const item = response.data?.[0];
-    const imageUrl = item?.url || (item?.b64_json ? `data:image/png;base64,${item.b64_json}` : "");
+    const [rawImage] = await generateLogoImages(request.prompt, 1);
+    const imageUrl = rawImage ? await stripBackground(rawImage) : "";
 
     return {
       imageUrl,
@@ -50,8 +36,12 @@ class MockAIService implements IAIService {
 }
 
 export function getAIService(): IAIService {
-  if (process.env.OPENAI_API_KEY || process.env.AI_API_KEY) {
-    return new OpenAIService();
+  const hasGoogleAuth =
+    process.env.GOOGLE_GENAI_USE_VERTEXAI === "true" ||
+    Boolean(process.env.GEMINI_API_KEY || process.env.AI_API_KEY);
+
+  if (hasGoogleAuth) {
+    return new GeminiService();
   }
   return new MockAIService();
 }

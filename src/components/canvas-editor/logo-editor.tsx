@@ -407,8 +407,13 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
     h.index = idx;
     try {
       await c.loadFromJSON(JSON.parse(h.stack[idx]));
+      /* the canvas may have been disposed while loadFromJSON enlivened objects */
+      if (fabricRef.current !== c) return;
       c.discardActiveObject();
       c.requestRenderAll();
+    } catch (err) {
+      console.error("Failed to restore canvas history:", err);
+      return;
     } finally {
       h.restoring = false;
     }
@@ -554,7 +559,7 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
           if (disposed) return;
           img.scaleToWidth(Math.min(w * 0.56, 300));
           img.set({
-            name: "Logo Image",
+            name: "Logo Icon",
             originX: "center",
             originY: "center",
             left: w / 2,
@@ -562,7 +567,7 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
           } as Partial<fabric.FabricObject>);
           c.add(img);
 
-          const brandText = new fabric.IText(logo.brandName.toUpperCase(), {
+          const brandText = new fabric.IText((logo.brandName || "BRAND").toUpperCase(), {
             left: w / 2,
             top: h * 0.78,
             originX: "center",
@@ -757,7 +762,7 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
       .then((img) => {
         img.scaleToWidth(Math.min(designRef.current.w * 0.5, 280));
         img.set({ originX: "center", originY: "center" });
-        addToCanvas(img, "Logo Image");
+        addToCanvas(img, "Logo Icon");
       })
       .catch((err) => console.error("Failed to add logo image:", err));
   }, [logo, addToCanvas]);
@@ -1619,7 +1624,7 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
                     <button
                       type="button"
                       onClick={() => {
-                        const t = new fabric.IText(logo.brandName.toUpperCase(), {
+                        const t = new fabric.IText((logo.brandName || "BRAND").toUpperCase(), {
                           fontFamily: textDefaultFont,
                           fontSize: 32,
                           fontWeight: "bold",

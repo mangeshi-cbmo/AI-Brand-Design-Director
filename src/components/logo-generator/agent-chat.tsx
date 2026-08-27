@@ -7,6 +7,7 @@ import {
   ArrowUp,
   Compass,
   ArrowRight,
+  BookOpen,
   Check,
   Copy,
   Download,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import { ChatMessage, QuickOption } from "@/types/chat";
 import { ColorPalette, GeneratedLogo, LogoStyle } from "@/types/logo";
+import { BrandGuidelines } from "@/types/brand";
+import { BrandGuidelinesModal } from "@/components/brand-kit/brand-guidelines";
 
 /* Shape of messages returned by /api/ai/agent-chat */
 interface ServerMessage {
@@ -29,12 +32,15 @@ interface ServerMessage {
     brandName?: string;
     style?: string;
     promptUsed?: string;
+    variantLogoIds?: string[];
   };
+  brandGuidelines?: BrandGuidelines;
 }
 
 interface AgentChatProps {
   sessionId: string;
   onLogoGenerated: (logo: GeneratedLogo) => void;
+  onGuidelinesGenerated?: (guidelines: BrandGuidelines) => void;
   onSessionUpdated?: () => void;
   onOpenEditor?: () => void;
 }
@@ -42,8 +48,8 @@ interface AgentChatProps {
 const THINKING_STEPS = [
   "Analyzing brand requirements",
   "Balancing typography & geometry",
-  "Composing vector mark tokens",
-  "Synthesizing high-res emblem",
+  "Synthesizing 4 emblem concepts",
+  "Compiling brand guidelines",
 ];
 
 import { PALETTE_SWATCHES } from "@/config/palettes";
@@ -66,7 +72,7 @@ function PaletteDots({ palette, size = 3 }: { palette?: string; size?: number })
 
 /* Renders **bold** and "- " bullet lines without a markdown dependency */
 function RichText({ content }: { content: string }) {
-  const lines = content.split("\n");
+  const lines = (content || "").split("\n");
   return (
     <div className="space-y-1.5">
       {lines.map((line, i) => {
@@ -123,6 +129,7 @@ const formatTime = (d: Date) =>
 export function AgentChat({
   sessionId,
   onLogoGenerated,
+  onGuidelinesGenerated,
   onSessionUpdated,
   onOpenEditor,
 }: AgentChatProps) {
@@ -145,6 +152,12 @@ export function AgentChat({
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingStepIdx, setThinkingStepIdx] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  /* Which concept is selected per generation message (msgId -> logoId) */
+  const [selectedConcepts, setSelectedConcepts] = useState<Record<string, string>>({});
+  const [guidelinesView, setGuidelinesView] = useState<{
+    guidelines: BrandGuidelines;
+    logo: GeneratedLogo | null;
+  } | null>(null);
 
   const [context, setContext] = useState<{
     brandName?: string;
@@ -159,8 +172,10 @@ export function AgentChat({
   const inputRef = useRef<HTMLInputElement>(null);
   const idSeqRef = useRef(0);
   const onLogoGeneratedRef = useRef(onLogoGenerated);
+  const onGuidelinesGeneratedRef = useRef(onGuidelinesGenerated);
   useEffect(() => {
     onLogoGeneratedRef.current = onLogoGenerated;
+    onGuidelinesGeneratedRef.current = onGuidelinesGenerated;
   });
 
   const scrollToBottom = () => {
@@ -193,25 +208,54 @@ export function AgentChat({
         const data = await res.json();
         if (data.success && data.data && data.data.messages?.length > 0) {
           const serverMessages = data.data.messages as ServerMessage[];
-          const loadedMessages: ChatMessage[] = serverMessages.map((m) => ({
-            id: m.id,
-            role: m.role,
-            content: m.content,
-            timestamp: new Date(m.createdAt),
-            quickOptions: m.quickOptions,
-            generatedLogo: m.logoData
-              ? {
-                  id: m.logoData.logoId || `logo-${m.id}`,
-                  imageUrl: m.logoData.imageUrl,
-                  brandName: m.logoData.brandName || "Brand Logo",
-                  style: (m.logoData.style as LogoStyle) || "minimalist",
-                  colorPalette:
-                    (data.data.brandContext?.colorPalette as ColorPalette) || "monochrome",
-                  promptUsed: m.logoData.promptUsed || "",
-                  createdAt: new Date(m.createdAt),
-                }
-              : undefined,
-          }));
+
+          // Hydrate concept variations from the logos collection (only ids
+          // are stored in the conversation to keep its document small)
+          const variantIds = new Set<string>();
+          serverMessages.forEach((m) =>
+            m.logoData?.variantLogoIds?.forEach((id) => variantIds.add(id))
+          );
+          const logoById = new Map<string, GeneratedLogo>();
+          if (variantIds.size > 0) {
+            try {
+              const logosRes = await fetch("/api/logos");
+              const logosJson = await logosRes.json();
+              if (logosJson.success && Array.isArray(logosJson.data)) {
+                (logosJson.data as GeneratedLogo[]).forEach((l) => {
+                  if (variantIds.has(l.id)) logoById.set(l.id, l);
+                });
+              }
+            } catch (err) {
+              console.error("Failed to hydrate logo variants:", err);
+            }
+          }
+
+          const loadedMessages: ChatMessage[] = serverMessages.map((m) => {
+            const variants = m.logoData?.variantLogoIds
+              ?.map((id) => logoById.get(id))
+              .filter((l): l is GeneratedLogo => Boolean(l));
+            return {
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              timestamp: new Date(m.createdAt),
+              quickOptions: m.quickOptions,
+              brandGuidelines: m.brandGuidelines,
+              generatedLogos: variants && variants.length > 1 ? variants : undefined,
+              generatedLogo: m.logoData
+                ? {
+                    id: m.logoData.logoId || `logo-${m.id}`,
+                    imageUrl: m.logoData.imageUrl,
+                    brandName: m.logoData.brandName || "Brand Logo",
+                    style: (m.logoData.style as LogoStyle) || "minimalist",
+                    colorPalette:
+                      (data.data.brandContext?.colorPalette as ColorPalette) || "monochrome",
+                    promptUsed: m.logoData.promptUsed || "",
+                    createdAt: new Date(m.createdAt),
+                  }
+                : undefined,
+            };
+          });
 
           setMessages(loadedMessages);
           setContext(data.data.brandContext || {});
@@ -219,6 +263,14 @@ export function AgentChat({
           const lastLogo = loadedMessages.slice().reverse().find((m) => m.generatedLogo);
           if (lastLogo?.generatedLogo) {
             onLogoGeneratedRef.current(lastLogo.generatedLogo);
+          }
+
+          const lastGuidelines = loadedMessages
+            .slice()
+            .reverse()
+            .find((m) => m.brandGuidelines);
+          if (lastGuidelines?.brandGuidelines) {
+            onGuidelinesGeneratedRef.current?.(lastGuidelines.brandGuidelines);
           }
         }
       } catch (err) {
@@ -263,22 +315,34 @@ export function AgentChat({
         throw new Error(json.error || "Failed to get agent response");
       }
 
-      const { message, quickOptions, generatedLogo, context: newContext } = json.data;
+      const {
+        message,
+        quickOptions,
+        generatedLogo,
+        generatedLogos,
+        brandGuidelines,
+        context: newContext,
+      } = json.data || {};
 
       setContext(newContext || {});
 
       if (generatedLogo) {
         onLogoGenerated(generatedLogo);
       }
+      if (brandGuidelines) {
+        onGuidelinesGenerated?.(brandGuidelines);
+      }
 
       idSeqRef.current += 1;
       const assistantMsg: ChatMessage = {
         id: `assistant_${idSeqRef.current}`,
         role: "assistant",
-        content: message,
+        content: message || "I generated a response, but it came back empty — please try again.",
         timestamp: new Date(),
         quickOptions,
         generatedLogo,
+        generatedLogos,
+        brandGuidelines,
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
@@ -302,7 +366,7 @@ export function AgentChat({
   };
 
   const handleCopyMessage = (msg: ChatMessage) => {
-    navigator.clipboard.writeText(msg.content.replace(/\*\*/g, ""));
+    navigator.clipboard.writeText((msg.content || "").replace(/\*\*/g, ""));
     setCopiedId(msg.id);
     setTimeout(() => setCopiedId(null), 1600);
   };
@@ -310,11 +374,29 @@ export function AgentChat({
   const handleDownloadLogo = (logo: GeneratedLogo) => {
     const a = document.createElement("a");
     a.href = logo.imageUrl;
-    a.download = `${logo.brandName.toLowerCase().replace(/\s+/g, "-")}-logo.png`;
+    a.download = `${(logo.brandName || "brand").toLowerCase().replace(/\s+/g, "-")}-logo.png`;
     a.target = "_blank";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  /* All concepts attached to a message, and the currently selected one */
+  const conceptsOf = (msg: ChatMessage): GeneratedLogo[] =>
+    msg.generatedLogos?.length
+      ? msg.generatedLogos
+      : msg.generatedLogo
+        ? [msg.generatedLogo]
+        : [];
+
+  const selectedConceptOf = (msg: ChatMessage): GeneratedLogo | undefined => {
+    const concepts = conceptsOf(msg);
+    return concepts.find((l) => l.id === selectedConcepts[msg.id]) || concepts[0];
+  };
+
+  const handleSelectConcept = (msg: ChatMessage, concept: GeneratedLogo) => {
+    setSelectedConcepts((prev) => ({ ...prev, [msg.id]: concept.id }));
+    onLogoGenerated(concept);
   };
 
   /* Spec pipeline: which brand parameters have been collected */
@@ -329,7 +411,15 @@ export function AgentChat({
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   return (
-    <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden font-sans">
+    <>
+      {guidelinesView && (
+        <BrandGuidelinesModal
+          guidelines={guidelinesView.guidelines}
+          logo={guidelinesView.logo}
+          onClose={() => setGuidelinesView(null)}
+        />
+      )}
+      <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden font-sans">
       {/* Agent Activity Header */}
       <div className="border-b border-neutral-900 bg-[#0d0d0d]">
         <div className="flex items-center justify-between px-5 py-3">
@@ -489,51 +579,122 @@ export function AgentChat({
                       <RichText content={msg.content} />
                     </div>
 
-                    {/* Generated logo card */}
-                    {msg.generatedLogo && (
-                      <div className="rounded-xl border border-neutral-800 bg-gradient-to-b from-[#131313] to-[#0d0d0d] p-3.5">
-                        <div className="flex items-center gap-4">
-                          <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-700 shrink-0 bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px]">
-                            <Image
-                              src={msg.generatedLogo.imageUrl}
-                              alt={msg.generatedLogo.brandName}
-                              fill
-                              unoptimized
-                              className="object-contain p-1.5"
-                            />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
-                              <p className="font-semibold text-sm text-white truncate">
-                                {msg.generatedLogo.brandName}
-                              </p>
+                    {/* Generated concepts */}
+                    {msg.generatedLogo &&
+                      (() => {
+                        const concepts = conceptsOf(msg);
+                        const selected = selectedConceptOf(msg)!;
+                        return (
+                          <div className="space-y-2.5">
+                            {/* Concept selection grid */}
+                            {concepts.length > 1 && (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {concepts.map((concept, ci) => {
+                                  const isSelected = concept.id === selected.id;
+                                  return (
+                                    <button
+                                      key={concept.id}
+                                      onClick={() => handleSelectConcept(msg, concept)}
+                                      title={`Select concept ${ci + 1}`}
+                                      className={`group relative aspect-square rounded-xl overflow-hidden border transition-all cursor-pointer bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px] ${
+                                        isSelected
+                                          ? "border-white ring-1 ring-white/60"
+                                          : "border-neutral-800 hover:border-neutral-600"
+                                      }`}
+                                    >
+                                      <Image
+                                        src={concept.imageUrl}
+                                        alt={`${concept.brandName} concept ${ci + 1}`}
+                                        fill
+                                        unoptimized
+                                        className="object-contain p-2.5"
+                                      />
+                                      <span
+                                        className={`absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md ${
+                                          isSelected
+                                            ? "bg-white text-black font-semibold"
+                                            : "bg-black/70 text-neutral-400"
+                                        }`}
+                                      >
+                                        0{ci + 1}
+                                      </span>
+                                      {isSelected && (
+                                        <span className="absolute bottom-1.5 right-1.5 w-4 h-4 rounded-full bg-white flex items-center justify-center">
+                                          <Check className="w-2.5 h-2.5 text-black" />
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Selected concept summary card */}
+                            <div className="rounded-xl border border-neutral-800 bg-gradient-to-b from-[#131313] to-[#0d0d0d] p-3.5">
+                              <div className="flex items-center gap-4">
+                                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-700 shrink-0 bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px]">
+                                  <Image
+                                    src={selected.imageUrl}
+                                    alt={selected.brandName}
+                                    fill
+                                    unoptimized
+                                    className="object-contain p-1.5"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
+                                    <p className="font-semibold text-sm text-white truncate">
+                                      {selected.brandName}
+                                    </p>
+                                  </div>
+                                  <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
+                                    {(selected.style || "custom").replace(/-/g, " ")} emblem
+                                    {concepts.length > 1
+                                      ? ` · concept ${concepts.findIndex((c) => c.id === selected.id) + 1}/${concepts.length}`
+                                      : " synthesized"}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                                    {onOpenEditor && (
+                                      <button
+                                        onClick={() => {
+                                          onLogoGenerated(selected);
+                                          onOpenEditor();
+                                        }}
+                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        Open in Editor
+                                      </button>
+                                    )}
+                                    {msg.brandGuidelines && (
+                                      <button
+                                        onClick={() =>
+                                          setGuidelinesView({
+                                            guidelines: msg.brandGuidelines!,
+                                            logo: selected,
+                                          })
+                                        }
+                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-200 text-[11px] font-medium hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+                                      >
+                                        <BookOpen className="w-3 h-3" />
+                                        Brand Guidelines
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDownloadLogo(selected)}
+                                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 text-[11px] hover:bg-neutral-900 hover:text-white transition-colors cursor-pointer"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      PNG
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
-                              {msg.generatedLogo.style.replace(/-/g, " ")} emblem synthesized
-                            </p>
-                            <div className="flex items-center gap-1.5 mt-2.5">
-                              {onOpenEditor && (
-                                <button
-                                  onClick={onOpenEditor}
-                                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
-                                >
-                                  <Edit3 className="w-3 h-3" />
-                                  Open in Editor
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleDownloadLogo(msg.generatedLogo!)}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 text-[11px] hover:bg-neutral-900 hover:text-white transition-colors cursor-pointer"
-                              >
-                                <Download className="w-3 h-3" />
-                                PNG
-                              </button>
-                            </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
+                        );
+                      })()}
 
                     {/* Quick option chips */}
                     {msg.quickOptions && msg.quickOptions.length > 0 && (
@@ -660,6 +821,7 @@ export function AgentChat({
           </div>
         </form>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
