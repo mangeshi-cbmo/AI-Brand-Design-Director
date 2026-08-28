@@ -1,6 +1,7 @@
 import { BrandGuidelines } from "@/types/brand";
 import { GeneratedLogo } from "@/types/logo";
 import { hexToRgb } from "@/config/brand-kit";
+import { renderLogoIconSvg } from "@/lib/ai/svg-renderer";
 
 /*
  * Standalone brand guidelines document generator.
@@ -33,13 +34,24 @@ export function buildGuidelinesHtml(
   const brandUpper = esc(g.brandName.toUpperCase());
   const headingFont = g.typography.heading.css;
   const bodyFont = g.typography.body.css;
-  const mark = logo?.imageUrl
-    ? `<img class="mark" src="${logo.imageUrl}" alt="${brand} mark" />`
-    : "";
-  const markSized = (px: number) =>
-    logo?.imageUrl
-      ? `<img src="${logo.imageUrl}" alt="${brand} mark" style="width:${px}px;height:${px}px;object-fit:contain;" />`
-      : "";
+
+  const markSized = (px: number, onLight = false) => {
+    if (logo?.logoData) {
+      try {
+        const svg = renderLogoIconSvg(logo.logoData, { onLight, onDark: !onLight });
+        const styledSvg = svg.replace("<svg ", `<svg style="width:100%;height:100%;object-fit:contain;" `);
+        return `<div style="width:${px}px;height:${px}px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${styledSvg}</div>`;
+      } catch (err) {
+        console.error("Error embedding SVG in guidelines HTML:", err);
+      }
+    }
+    if (logo?.imageUrl) {
+      return `<img src="${logo.imageUrl}" alt="${brand} mark" style="width:${px}px;height:${px}px;object-fit:contain;flex-shrink:0;" />`;
+    }
+    return "";
+  };
+
+  const mark = markSized(110);
   const date = new Date().toLocaleDateString([], { year: "numeric", month: "long", day: "numeric" });
 
   const swatches = g.colors
@@ -227,7 +239,7 @@ export function buildGuidelinesHtml(
         <span class="tag">Icon Only · App &amp; Favicon · 1:1</span>
       </div>
       <div class="lockup light full">
-        ${markSized(54)}
+        ${markSized(54, true)}
         <span class="name" style="font-size:20px">${brandUpper}</span>
         <span class="tag">On Light Surfaces · 3:1</span>
       </div>

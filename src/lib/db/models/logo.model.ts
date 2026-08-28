@@ -9,6 +9,8 @@ export interface ILogoDocument extends Document {
   industry?: string;
   concept?: string;
   userEmail?: string;
+  /** Structured editable logo data (SVG/JSON system) */
+  logoData?: Record<string, unknown>;
   createdAt: Date;
 }
 
@@ -22,6 +24,7 @@ const LogoSchema = new Schema<ILogoDocument>(
     industry: { type: String },
     concept: { type: String },
     userEmail: { type: String, default: "guest@logoforge.ai" },
+    logoData: { type: Schema.Types.Mixed },
   },
   {
     timestamps: true,
@@ -31,3 +34,4 @@ const LogoSchema = new Schema<ILogoDocument>(
 
 export const LogoModel: Model<ILogoDocument> =
   mongoose.models.Logo || mongoose.model<ILogoDocument>("Logo", LogoSchema);
+

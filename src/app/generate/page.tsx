@@ -7,6 +7,7 @@ import { MessageSquare, Edit3, Compass, PanelLeft, BookOpen } from "lucide-react
 import { AgentChat } from "@/components/logo-generator/agent-chat";
 import { LogoCanvas } from "@/components/logo-generator/logo-canvas";
 import { LogoEditor } from "@/components/canvas-editor/logo-editor";
+import { SvgLogoEditor } from "@/components/canvas-editor/svg-logo-editor";
 import {
   BrandGuidelinesDocument,
   GuidelinesActions,
@@ -256,10 +257,17 @@ export default function GenerateStudioPage() {
       ) : activeView === "editor" ? (
         /* Full Canvas Editor View */
         <div className="w-full space-y-4">
-          <LogoEditor
-            logo={currentLogo}
-            onClose={() => setActiveView("studio")}
-          />
+          {currentLogo?.logoData ? (
+            <SvgLogoEditor
+              logoData={currentLogo.logoData}
+              onClose={() => setActiveView("studio")}
+            />
+          ) : (
+            <LogoEditor
+              logo={currentLogo}
+              onClose={() => setActiveView("studio")}
+            />
+          )}
         </div>
       ) : (
         /* Brand Guidelines View */

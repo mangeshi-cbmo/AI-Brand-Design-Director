@@ -1,6 +1,6 @@
 import { connectDB } from "@/lib/db/client";
 import { LogoModel } from "@/lib/db/models/logo.model";
-import { ColorPalette, GeneratedLogo, LogoGenerationParams, LogoStyle } from "@/types/logo";
+import { ColorPalette, GeneratedLogo, LogoData, LogoGenerationParams, LogoStyle } from "@/types/logo";
 
 export class LogoService {
   /**
@@ -21,6 +21,7 @@ export class LogoService {
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",
+        logoData: doc.logoData as LogoData | undefined,
         createdAt: new Date(doc.createdAt),
       }));
     } catch (error) {
@@ -36,7 +37,8 @@ export class LogoService {
     params: LogoGenerationParams,
     imageUrl: string,
     promptUsed: string,
-    userEmail?: string
+    userEmail?: string,
+    logoData?: LogoData
   ): Promise<GeneratedLogo> {
     try {
       await connectDB();
@@ -49,6 +51,7 @@ export class LogoService {
         industry: params.industry,
         concept: params.conceptDescription,
         userEmail: userEmail || "guest@logoforge.ai",
+        logoData: logoData ? (logoData as unknown as Record<string, unknown>) : undefined,
       });
 
       return {
@@ -58,6 +61,7 @@ export class LogoService {
         style: newDoc.style as LogoStyle,
         colorPalette: newDoc.colorPalette as ColorPalette,
         promptUsed: newDoc.promptUsed,
+        logoData: newDoc.logoData as LogoData | undefined,
         createdAt: new Date(newDoc.createdAt),
       };
     } catch (error) {
@@ -70,6 +74,7 @@ export class LogoService {
         style: params.style,
         colorPalette: params.colorPalette,
         promptUsed,
+        logoData,
         createdAt: new Date(),
       };
     }
@@ -107,6 +112,7 @@ export class LogoService {
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",
+        logoData: doc.logoData as LogoData | undefined,
         createdAt: new Date(doc.createdAt),
       };
     } catch (error) {

@@ -602,13 +602,25 @@ export function AgentChat({
                                           : "border-neutral-800 hover:border-neutral-600"
                                       }`}
                                     >
-                                      <Image
-                                        src={concept.imageUrl}
-                                        alt={`${concept.brandName} concept ${ci + 1}`}
-                                        fill
-                                        unoptimized
-                                        className="object-contain p-2.5"
-                                      />
+                                      {concept.logoData ? (
+                                        <div
+                                          className="absolute inset-0 p-2 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
+                                          dangerouslySetInnerHTML={{ __html: (() => {
+                                            try {
+                                              const { renderLogoDataToSvg } = require("@/lib/ai/svg-renderer");
+                                              return renderLogoDataToSvg(concept.logoData);
+                                            } catch { return ""; }
+                                          })() }}
+                                        />
+                                      ) : (
+                                        <Image
+                                          src={concept.imageUrl}
+                                          alt={`${concept.brandName} concept ${ci + 1}`}
+                                          fill
+                                          unoptimized
+                                          className="object-contain p-2.5"
+                                        />
+                                      )}
                                       <span
                                         className={`absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md ${
                                           isSelected
@@ -633,13 +645,25 @@ export function AgentChat({
                             <div className="rounded-xl border border-neutral-800 bg-gradient-to-b from-[#131313] to-[#0d0d0d] p-3.5">
                               <div className="flex items-center gap-4">
                                 <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-700 shrink-0 bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px]">
-                                  <Image
-                                    src={selected.imageUrl}
-                                    alt={selected.brandName}
-                                    fill
-                                    unoptimized
-                                    className="object-contain p-1.5"
-                                  />
+                                  {selected.logoData ? (
+                                    <div
+                                      className="absolute inset-0 p-1 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
+                                      dangerouslySetInnerHTML={{ __html: (() => {
+                                        try {
+                                          const { renderLogoDataToSvg } = require("@/lib/ai/svg-renderer");
+                                          return renderLogoDataToSvg(selected.logoData);
+                                        } catch { return ""; }
+                                      })() }}
+                                    />
+                                  ) : (
+                                    <Image
+                                      src={selected.imageUrl}
+                                      alt={selected.brandName}
+                                      fill
+                                      unoptimized
+                                      className="object-contain p-1.5"
+                                    />
+                                  )}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5">
@@ -649,7 +673,9 @@ export function AgentChat({
                                     </p>
                                   </div>
                                   <p className="text-[11px] text-neutral-400 capitalize mt-0.5 font-mono">
-                                    {(selected.style || "custom").replace(/-/g, " ")} emblem
+                                    {selected.logoData
+                                      ? `${selected.logoData.logoType.replace(/-/g, " ")} · editable SVG`
+                                      : `${(selected.style || "custom").replace(/-/g, " ")} emblem`}
                                     {concepts.length > 1
                                       ? ` · concept ${concepts.findIndex((c) => c.id === selected.id) + 1}/${concepts.length}`
                                       : " synthesized"}
