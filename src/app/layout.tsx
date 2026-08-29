@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/navbar";
@@ -8,14 +8,121 @@ import { SessionProvider } from "@/components/providers/session-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+    { media: "(prefers-color-scheme: light)", color: "#000000" },
+  ],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  colorScheme: "dark",
+};
+
 export const metadata: Metadata = {
-  title: `${siteConfig.name} - AI Brand Architect & Logo Studio`,
+  metadataBase: new URL(siteConfig.url),
+  title: {
+    default: `${siteConfig.name} — AI Brand Architect & Logo Studio`,
+    template: `%s | ${siteConfig.name}`,
+  },
   description: siteConfig.description,
+  applicationName: siteConfig.name,
+  authors: [{ name: siteConfig.creator, url: siteConfig.url }],
+  generator: "Next.js",
+  keywords: siteConfig.keywords,
+  creator: siteConfig.creator,
+  publisher: siteConfig.publisher,
+  category: "Design & Creative Tools",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: siteConfig.url,
+    title: `${siteConfig.name} — AI Brand Architect & Logo Studio`,
+    description: siteConfig.description,
+    siteName: siteConfig.name,
+    images: [
+      {
+        url: "/logo.jpeg",
+        width: 1200,
+        height: 630,
+        alt: `${siteConfig.name} - Next-Gen AI Brand Architect`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${siteConfig.name} — AI Brand Architect & Logo Studio`,
+    description: siteConfig.description,
+    images: ["/logo.jpeg"],
+    creator: siteConfig.twitterHandle,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   icons: {
-    icon: "/logo.jpeg",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/logo.jpeg", type: "image/jpeg" },
+    ],
     shortcut: "/logo.jpeg",
     apple: "/logo.jpeg",
   },
+  manifest: "/manifest.webmanifest",
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${siteConfig.url}/#website`,
+      "url": siteConfig.url,
+      "name": siteConfig.name,
+      "description": siteConfig.description,
+      "publisher": {
+        "@id": `${siteConfig.url}/#organization`,
+      },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${siteConfig.url}/#organization`,
+      "name": siteConfig.name,
+      "url": siteConfig.url,
+      "logo": {
+        "@type": "ImageObject",
+        "url": `${siteConfig.url}/logo.jpeg`,
+      },
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": `${siteConfig.url}/#software`,
+      "name": `${siteConfig.name} - Brand Design Director`,
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "All",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+      },
+      "description": siteConfig.description,
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -25,6 +132,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark h-full">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body
         className={`${inter.className} min-h-screen flex flex-col bg-black text-white antialiased selection:bg-white selection:text-black`}
       >
