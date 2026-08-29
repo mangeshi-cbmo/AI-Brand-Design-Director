@@ -2,11 +2,12 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { Download, Copy, Check, Eye, Edit3, Compass } from "lucide-react";
+import { Download, Copy, Check, Eye, Edit3, Compass, FileCode } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { GeneratedLogo } from "@/types/logo";
+import { renderLogoDataToSvg } from "@/lib/ai/svg-renderer";
 import { formatDate } from "@/lib/utils";
 
 interface LogoCanvasProps {
@@ -26,7 +27,7 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = () => {
+  const handleDownloadPng = () => {
     if (!logo?.imageUrl) return;
     const a = document.createElement("a");
     a.href = logo.imageUrl;
@@ -35,6 +36,48 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleDownloadSvg = () => {
+    if (!logo?.logoData) return;
+    const svgStr = renderLogoDataToSvg(logo.logoData);
+    const blob = new Blob([svgStr], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(logo.brandName || "brand").toLowerCase().replace(/\s+/g, "-")}-logo.svg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  /** Render the SVG preview inline when logoData is available */
+  const renderPreview = () => {
+    if (logo?.logoData) {
+      const svgStr = renderLogoDataToSvg(logo.logoData);
+      return (
+        <div
+          className="relative flex-1 w-full min-h-0 flex items-center justify-center p-4"
+          dangerouslySetInnerHTML={{ __html: svgStr }}
+          style={{ maxHeight: "100%" }}
+        />
+      );
+    }
+
+    // Fallback: image-based preview (for old logos)
+    return (
+      <div className="relative flex-1 w-full min-h-0 flex items-center justify-center">
+        <Image
+          src={logo!.imageUrl}
+          alt={logo!.brandName}
+          width={300}
+          height={300}
+          unoptimized
+          className="object-contain max-h-full rounded-xl"
+        />
+      </div>
+    );
   };
 
   return (
@@ -51,9 +94,16 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
             </CardDescription>
           </div>
           {logo && (
-            <Badge variant="white" className="capitalize">
-              {(logo.style || "custom").replace("-", " ")}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              {logo.logoData && (
+                <Badge variant="white" className="text-[10px]">
+                  SVG
+                </Badge>
+              )}
+              <Badge variant="white" className="capitalize">
+                {(logo.style || "custom").replace("-", " ")}
+              </Badge>
+            </div>
           )}
         </div>
       </CardHeader>
@@ -72,24 +122,17 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
           {isGenerating ? (
             <div className="flex flex-col items-center gap-3 text-center px-4">
               <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <p className="text-sm font-medium text-white">Synthesizing logo mark...</p>
-              <p className="text-xs text-neutral-500">Vector layout & geometry</p>
+              <p className="text-sm font-medium text-white">Synthesizing logo concepts...</p>
+              <p className="text-xs text-neutral-500">Structured SVG generation</p>
             </div>
           ) : logo ? (
             <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 p-6">
-              <div className="relative flex-1 w-full min-h-0 flex items-center justify-center">
-                <Image
-                  src={logo.imageUrl}
-                  alt={logo.brandName}
-                  width={300}
-                  height={300}
-                  unoptimized
-                  className="object-contain max-h-full rounded-xl"
-                />
-              </div>
-              <p className="text-white font-bold text-lg uppercase tracking-[0.2em] text-center shrink-0">
-                {logo.brandName}
-              </p>
+              {renderPreview()}
+              {!logo.logoData && (
+                <p className="text-white font-bold text-lg uppercase tracking-[0.2em] text-center shrink-0">
+                  {logo.brandName}
+                </p>
+              )}
             </div>
           ) : (
             <div className="text-center px-6 py-12">
@@ -98,7 +141,7 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
               </div>
               <h4 className="text-sm font-semibold text-neutral-300">Ready to synthesize</h4>
               <p className="text-xs text-neutral-500 mt-1 max-w-[200px] mx-auto">
-                Chat with the Architect to generate your brand emblem.
+                Chat with the Architect to generate your editable brand logo.
               </p>
             </div>
           )}
@@ -111,12 +154,18 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
             {onOpenEditor && (
               <Button onClick={onOpenEditor} variant="primary" className="w-full">
                 <Edit3 className="w-4 h-4 mr-2" />
-                Edit in Canvas Editor
+                {logo.logoData ? "Edit in Logo Editor" : "Edit in Canvas Editor"}
               </Button>
             )}
 
             <div className="flex gap-2">
-              <Button onClick={handleDownload} variant="secondary" className="flex-1 text-xs">
+              {logo.logoData && (
+                <Button onClick={handleDownloadSvg} variant="secondary" className="flex-1 text-xs">
+                  <FileCode className="w-3.5 h-3.5 mr-1.5" />
+                  Download SVG
+                </Button>
+              )}
+              <Button onClick={handleDownloadPng} variant="secondary" className="flex-1 text-xs">
                 <Download className="w-3.5 h-3.5 mr-1.5" />
                 Download PNG
               </Button>

@@ -94,7 +94,7 @@ export class ConversationService {
           messages: { $each: [userMessage, assistantMessage] },
         },
       },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     return conv;
@@ -112,7 +112,7 @@ export class ConversationService {
     return ConversationModel.findOneAndUpdate(
       { sessionId, userId },
       { $set: { title } },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 

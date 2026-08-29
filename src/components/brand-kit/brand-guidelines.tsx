@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { X, Check, Ban, BookOpen, FileDown, FileCode2 } from "lucide-react";
@@ -8,6 +8,7 @@ import { BrandGuidelines } from "@/types/brand";
 import { GeneratedLogo } from "@/types/logo";
 import { hexToRgb } from "@/config/brand-kit";
 import { downloadGuidelinesHtml, downloadGuidelinesPdf } from "@/lib/brand-guidelines-html";
+import { renderLogoDataToSvg, renderLogoIconSvg } from "@/lib/ai/svg-renderer";
 import { formatDate } from "@/lib/utils";
 
 interface GuidelinesProps {
@@ -26,18 +27,66 @@ function SectionHeader({ index, title }: { index: string; title: string }) {
   );
 }
 
-function MarkImage({ logo, className }: { logo: GeneratedLogo | null; className?: string }) {
+/**
+ * Universal logo/mark renderer for the guidelines document.
+ * Correctly handles both structured SVG logos (with transparent bg and surface adaptation)
+ * and legacy PNG image URLs.
+ */
+function MarkImage({
+  logo,
+  className,
+  variant = "icon",
+}: {
+  logo: GeneratedLogo | null;
+  className?: string;
+  variant?: "icon" | "full" | "on-light" | "on-dark";
+}) {
+  const svgMarkup = useMemo(() => {
+    if (!logo?.logoData) return null;
+    try {
+      if (variant === "on-light") {
+        return renderLogoIconSvg(logo.logoData, { onLight: true });
+      }
+      if (variant === "on-dark") {
+        return renderLogoIconSvg(logo.logoData, { onDark: true });
+      }
+      if (variant === "full") {
+        return renderLogoDataToSvg(logo.logoData, { transparentBg: true });
+      }
+      return renderLogoIconSvg(logo.logoData, { onDark: true });
+    } catch (e) {
+      console.error("Error rendering mark SVG in guidelines:", e);
+      return null;
+    }
+  }, [logo, variant]);
+
   if (!logo) return null;
-  return (
-    <Image
-      src={logo.imageUrl}
-      alt={logo.brandName}
-      width={160}
-      height={160}
-      unoptimized
-      className={`object-contain ${className || ""}`}
-    />
-  );
+
+  if (svgMarkup) {
+    return (
+      <div
+        className={`flex items-center justify-center shrink-0 [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain ${className || "h-16 w-16"}`}
+        dangerouslySetInnerHTML={{ __html: svgMarkup }}
+      />
+    );
+  }
+
+  if (logo.imageUrl) {
+    return (
+      <div className={`relative flex items-center justify-center shrink-0 ${className || "h-16 w-16"}`}>
+        <Image
+          src={logo.imageUrl}
+          alt={logo.brandName}
+          width={160}
+          height={160}
+          unoptimized
+          className="object-contain max-h-full max-w-full"
+        />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 /* Download the document as print-ready PDF or self-contained HTML */
@@ -78,7 +127,7 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
       {/* Cover */}
       <div className="text-center py-8 border border-neutral-900 rounded-2xl bg-[radial-gradient(ellipse_at_top,#141414,transparent_70%)]">
         <div className="flex justify-center mb-5">
-          <MarkImage logo={logo} className="h-24 w-24" />
+          <MarkImage logo={logo} variant="icon" className="h-24 w-24" />
         </div>
         <h1
           className="text-3xl sm:text-4xl font-bold text-white uppercase tracking-[0.22em]"
@@ -125,8 +174,8 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
         <SectionHeader index="02" title="Logo Suite" />
         <div className="grid grid-cols-2 gap-3">
           {/* Primary horizontal lockup */}
-          <div className="col-span-2 rounded-xl border border-neutral-800 bg-neutral-950 bg-[radial-gradient(#1c1c1c_1px,transparent_1px)] bg-[size:14px_14px] h-44 flex items-center justify-center gap-5 relative">
-            <MarkImage logo={logo} className="h-16 w-16" />
+          <div className="col-span-2 rounded-xl border border-neutral-800 bg-neutral-950 bg-[radial-gradient(#1c1c1c_1px,transparent_1px)] bg-[size:14px_14px] h-44 flex items-center justify-center gap-5 relative px-6">
+            <MarkImage logo={logo} variant="icon" className="h-16 w-16" />
             <span
               className="text-2xl font-bold text-white uppercase tracking-[0.2em]"
               style={headingFont}
@@ -139,10 +188,10 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
           </div>
 
           {/* Stacked lockup */}
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 h-48 flex flex-col items-center justify-center gap-3.5 relative">
-            <MarkImage logo={logo} className="h-16 w-16" />
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 h-48 flex flex-col items-center justify-center gap-3.5 relative px-4">
+            <MarkImage logo={logo} variant="icon" className="h-16 w-16" />
             <span
-              className="text-sm font-bold text-white uppercase tracking-[0.22em]"
+              className="text-sm font-bold text-white uppercase tracking-[0.22em] text-center"
               style={headingFont}
             >
               {brandUpper}
@@ -154,8 +203,8 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
 
           {/* Icon only */}
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 h-48 flex items-center justify-center relative">
-            <div className="w-20 h-20 rounded-2xl border border-neutral-800 bg-[#111111] flex items-center justify-center">
-              <MarkImage logo={logo} className="h-14 w-14" />
+            <div className="w-20 h-20 rounded-2xl border border-neutral-800 bg-[#111111] flex items-center justify-center p-2">
+              <MarkImage logo={logo} variant="icon" className="h-14 w-14" />
             </div>
             <span className="absolute bottom-2.5 left-3.5 text-[9px] font-mono text-neutral-600 uppercase tracking-wider">
               Icon Only · App & Favicon · 1:1
@@ -163,8 +212,8 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
           </div>
 
           {/* On light */}
-          <div className="col-span-2 rounded-xl border border-neutral-800 bg-[#fafafa] h-36 flex items-center justify-center gap-5 relative">
-            <MarkImage logo={logo} className="h-14 w-14" />
+          <div className="col-span-2 rounded-xl border border-neutral-800 bg-[#fafafa] h-36 flex items-center justify-center gap-5 relative px-6">
+            <MarkImage logo={logo} variant="on-light" className="h-14 w-14" />
             <span
               className="text-xl font-bold text-neutral-900 uppercase tracking-[0.2em]"
               style={headingFont}
@@ -183,8 +232,8 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
         <SectionHeader index="03" title="Clear Space & Minimum Size" />
         <div className="grid sm:grid-cols-2 gap-3">
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6 flex flex-col items-center justify-center gap-4">
-            <div className="border border-dashed border-neutral-600 rounded-lg p-8 relative">
-              <MarkImage logo={logo} className="h-14 w-14" />
+            <div className="border border-dashed border-neutral-600 rounded-lg p-8 relative flex items-center justify-center">
+              <MarkImage logo={logo} variant="icon" className="h-14 w-14" />
               <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[9px] font-mono text-neutral-500">
                 ¼×
               </span>
@@ -206,11 +255,11 @@ export function BrandGuidelinesDocument({ guidelines, logo }: GuidelinesProps) {
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6 flex flex-col items-center justify-center gap-4">
             <div className="flex items-end gap-6">
               <div className="flex flex-col items-center gap-1.5">
-                <MarkImage logo={logo} className="h-14 w-14" />
+                <MarkImage logo={logo} variant="icon" className="h-14 w-14" />
                 <span className="text-[9px] font-mono text-neutral-500">56 px</span>
               </div>
               <div className="flex flex-col items-center gap-1.5">
-                <MarkImage logo={logo} className="h-8 w-8" />
+                <MarkImage logo={logo} variant="icon" className="h-8 w-8" />
                 <span className="text-[9px] font-mono text-neutral-500">32 px</span>
               </div>
             </div>

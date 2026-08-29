@@ -5,13 +5,15 @@ import { GeneratedLogo } from "@/types/logo";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email || undefined;
+    const idsParam = req.nextUrl.searchParams.get("ids");
+    const ids = idsParam ? idsParam.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
 
     // Fetch from MongoDB Atlas 'logo' database
-    const logos = await LogoService.getAllLogos(userEmail);
+    const logos = await LogoService.getAllLogos(userEmail, ids);
 
     const response: ApiResponse<GeneratedLogo[]> = {
       success: true,
