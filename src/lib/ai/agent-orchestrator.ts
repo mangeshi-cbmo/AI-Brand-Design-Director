@@ -1,9 +1,11 @@
 import { buildLogoPrompt } from "./prompts";
 import { buildBrandGuidelines } from "./brand-guidelines";
 import { generateJson, generateLogoImages, GEMINI_IMAGE_MODEL } from "./gemini";
+import { generateStructuredLogos } from "./svg-logo-prompt";
+import { renderLogoDataToDataUrl } from "./svg-renderer";
 import { stripBackground } from "./strip-background";
 import { LogoService } from "@/services/logo.service";
-import { GeneratedLogo, LogoStyle, ColorPalette } from "@/types/logo";
+import { GeneratedLogo, LogoStyle, ColorPalette, LogoData } from "@/types/logo";
 import { BrandGuidelines } from "@/types/brand";
 import { QuickOption } from "@/types/chat";
 
@@ -34,7 +36,8 @@ export interface AgentOrchestrationResult {
 export class AgentOrchestrator {
   /**
    * Main conversational reasoning loop powered by Google Gemini (via the
-   * GenAI SDK on Vertex AI) plus Google image models for the logo concepts.
+   * GenAI SDK on Vertex AI) plus structured SVG generation for the logo
+   * concepts.
    */
   static async processMessage(
     userMessage: string,
@@ -57,7 +60,7 @@ Instructions:
 4. If brandName, industry, and style are known OR the user explicitly requests to generate/refine, set "shouldGenerateLogo": true.
 5. Provide 3-5 concise, clickable quick options for the user to tap.
 6. When refining an existing logo, explain what artistic improvements you made.
-6b. When "shouldGenerateLogo" is true, tell the user you are crafting 4 distinct logo concepts plus a complete brand guidelines document, and invite them to pick their favorite concept.
+6b. When "shouldGenerateLogo" is true, tell the user you are crafting 4 distinct editable logo concepts plus a complete brand guidelines document, and invite them to pick their favorite concept and customize it in the editor.
 7. NEVER use double asterisks or markdown bold stars (like **text**). Write clean, natural plain text without any asterisks.
 
 Respond strictly in JSON matching this schema:
@@ -145,60 +148,114 @@ Respond strictly in JSON matching this schema:
         conceptDescription: updatedCtx.concept,
         slogan: updatedCtx.slogan,
       };
-      const masterPrompt = buildLogoPrompt(generationParams);
 
-      let imageUrls: string[] = [];
+      let logoDataConcepts: LogoData[] = [];
+      let guidelinesResult: BrandGuidelines | undefined = undefined;
 
       try {
         console.log(
-          `Generating ${CONCEPT_COUNT} icon-only logo concepts using Google image model (${GEMINI_IMAGE_MODEL})...`
+          `Generating ${CONCEPT_COUNT} structured SVG logo concepts and brand guidelines in parallel...`
         );
-        const rawImages = await generateLogoImages(masterPrompt, CONCEPT_COUNT);
-        // Google image models return opaque images — clear the flat
-        // background so the canvas editor gets transparent icon marks
-        imageUrls = await Promise.all(rawImages.map((url) => stripBackground(url)));
-      } catch (imageError) {
-        console.error("Google Image Generation Error:", imageError);
+        // Run both generation pipelines in parallel
+        const [logosOutcome, guidelinesOutcome] = await Promise.allSettled([
+          generateStructuredLogos(generationParams),
+          buildBrandGuidelines({
+            brandName: generationParams.brandName,
+            industry: generationParams.industry,
+            style: generationParams.style,
+            colorPalette: generationParams.colorPalette,
+            concept: updatedCtx.concept,
+            slogan: updatedCtx.slogan,
+          }),
+        ]);
+
+        if (logosOutcome.status === "fulfilled") {
+          logoDataConcepts = logosOutcome.value;
+        } else {
+          console.error("Structured logo generation error:", logosOutcome.reason);
+        }
+
+        if (guidelinesOutcome.status === "fulfilled") {
+          guidelinesResult = guidelinesOutcome.value;
+        } else {
+          console.error("Brand guidelines generation error:", guidelinesOutcome.reason);
+        }
+      } catch (genError) {
+        console.error("Generation error:", genError);
       }
 
-      if (imageUrls.length === 0) {
-        imageUrls = [
-          `https://placehold.co/800x800/000000/ffffff?text=${encodeURIComponent(
+      // Render each concept to an SVG data URL for preview + backward compat
+      const conceptsWithPreviews = logoDataConcepts.map((logoData) => ({
+        logoData,
+        imageUrl: renderLogoDataToDataUrl(logoData),
+      }));
+
+      // Provide a fallback if generation completely failed
+      if (conceptsWithPreviews.length === 0) {
+        conceptsWithPreviews.push({
+          logoData: {
+            brandName: updatedCtx.brandName,
+            logoType: "combination-mark",
+            colorPalette: [
+              { hex: "#2D2D2D", role: "primary", label: "Primary" },
+              { hex: "#6B6B6B", role: "secondary", label: "Secondary" },
+              { hex: "#A0A0A0", role: "accent", label: "Accent" },
+              { hex: "#FFFFFF", role: "background", label: "Background" },
+              { hex: "#111111", role: "text", label: "Text" },
+            ],
+            fontRecommendations: [
+              { family: "Inter", googleFontsName: "Inter", weight: 700, role: "heading" },
+              { family: "Inter", googleFontsName: "Inter", weight: 400, role: "body" },
+            ],
+            layers: [
+              {
+                id: "fallback-text",
+                type: "text",
+                label: "Brand Name",
+                content: updatedCtx.brandName,
+                x: 250, y: 260, width: 400, height: 60,
+                fill: "#111111",
+                fontFamily: "Inter",
+                fontSize: 48,
+                fontWeight: 700,
+                letterSpacing: 2,
+                textAnchor: "middle",
+                opacity: 1, rotation: 0, visible: true, locked: false,
+              },
+            ],
+            canvasWidth: 500,
+            canvasHeight: 500,
+            backgroundColor: "#FFFFFF",
+          },
+          imageUrl: `https://placehold.co/800x800/000000/ffffff?text=${encodeURIComponent(
             updatedCtx.brandName
           )}+Logo`,
-        ];
+        });
       }
 
-      // 3. Save every concept to MongoDB Atlas, plus the brand guidelines copy
-      const [savedLogos, guidelines] = await Promise.all([
-        Promise.all(
-          imageUrls.map((url) =>
-            LogoService.saveLogo(
-              {
-                brandName: generationParams.brandName,
-                industry: generationParams.industry,
-                style: generationParams.style,
-                colorPalette: generationParams.colorPalette,
-                conceptDescription: updatedCtx.concept,
-              },
-              url,
-              masterPrompt,
-              userEmail
-            )
+      // 3. Save every concept to MongoDB Atlas asynchronously
+      const masterPrompt = buildLogoPrompt(generationParams);
+
+      const savedLogos = await Promise.all(
+        conceptsWithPreviews.map(({ imageUrl, logoData }) =>
+          LogoService.saveLogo(
+            {
+              brandName: generationParams.brandName,
+              industry: generationParams.industry,
+              style: generationParams.style,
+              colorPalette: generationParams.colorPalette,
+              conceptDescription: updatedCtx.concept,
+            },
+            imageUrl,
+            masterPrompt,
+            userEmail,
+            logoData
           )
-        ),
-        buildBrandGuidelines({
-          brandName: generationParams.brandName,
-          industry: generationParams.industry,
-          style: generationParams.style,
-          colorPalette: generationParams.colorPalette,
-          concept: updatedCtx.concept,
-          slogan: updatedCtx.slogan,
-        }),
-      ]);
+        )
+      );
 
       generatedLogos = savedLogos;
-      brandGuidelines = guidelines;
+      brandGuidelines = guidelinesResult;
     }
 
     return {

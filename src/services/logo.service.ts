@@ -1,16 +1,25 @@
 import { connectDB } from "@/lib/db/client";
 import { LogoModel } from "@/lib/db/models/logo.model";
-import { ColorPalette, GeneratedLogo, LogoGenerationParams, LogoStyle } from "@/types/logo";
+import { ColorPalette, GeneratedLogo, LogoData, LogoGenerationParams, LogoStyle } from "@/types/logo";
 
 export class LogoService {
   /**
-   * Fetch all logos from MongoDB Atlas 'logo' database
+   * Fetch logos from MongoDB Atlas 'logo' database with optional id/email filtering and limit
    */
-  static async getAllLogos(userEmail?: string): Promise<GeneratedLogo[]> {
+  static async getAllLogos(userEmail?: string, ids?: string[], limit: number = 60): Promise<GeneratedLogo[]> {
     try {
       await connectDB();
-      const filter = userEmail ? { userEmail } : {};
-      const docs = await LogoModel.find(filter).sort({ createdAt: -1 }).lean();
+      const filter: Record<string, unknown> = {};
+      if (ids && ids.length > 0) {
+        filter._id = { $in: ids };
+      } else if (userEmail) {
+        filter.userEmail = userEmail;
+      }
+
+      const docs = await LogoModel.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
 
       // Older documents can lack these fields — default them so the UI never
       // receives undefined where GeneratedLogo promises a string.
@@ -21,6 +30,7 @@ export class LogoService {
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",
+        logoData: doc.logoData as LogoData | undefined,
         createdAt: new Date(doc.createdAt),
       }));
     } catch (error) {
@@ -36,7 +46,8 @@ export class LogoService {
     params: LogoGenerationParams,
     imageUrl: string,
     promptUsed: string,
-    userEmail?: string
+    userEmail?: string,
+    logoData?: LogoData
   ): Promise<GeneratedLogo> {
     try {
       await connectDB();
@@ -49,6 +60,7 @@ export class LogoService {
         industry: params.industry,
         concept: params.conceptDescription,
         userEmail: userEmail || "guest@logoforge.ai",
+        logoData: logoData ? (logoData as unknown as Record<string, unknown>) : undefined,
       });
 
       return {
@@ -58,6 +70,7 @@ export class LogoService {
         style: newDoc.style as LogoStyle,
         colorPalette: newDoc.colorPalette as ColorPalette,
         promptUsed: newDoc.promptUsed,
+        logoData: newDoc.logoData as LogoData | undefined,
         createdAt: new Date(newDoc.createdAt),
       };
     } catch (error) {
@@ -70,6 +83,7 @@ export class LogoService {
         style: params.style,
         colorPalette: params.colorPalette,
         promptUsed,
+        logoData,
         createdAt: new Date(),
       };
     }
@@ -107,6 +121,7 @@ export class LogoService {
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",
+        logoData: doc.logoData as LogoData | undefined,
         createdAt: new Date(doc.createdAt),
       };
     } catch (error) {

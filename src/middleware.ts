@@ -86,10 +86,12 @@ export function middleware(req: NextRequest) {
   )
   res.headers.set('X-XSS-Protection', '0')
 
-  res.headers.set(
-    'Content-Security-Policy',
-    "default-src 'self'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-  )
+  const isDev = process.env.NODE_ENV !== 'production'
+  const cspHeader = isDev
+    ? "default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https: https://fonts.gstatic.com; connect-src 'self' https: ws: wss:;"
+    : "default-src 'self'; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https: https://fonts.gstatic.com; connect-src 'self' https:;"
+
+  res.headers.set('Content-Security-Policy', cspHeader)
 
   return res
 }

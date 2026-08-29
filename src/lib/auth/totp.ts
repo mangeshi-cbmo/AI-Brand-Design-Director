@@ -46,7 +46,7 @@ async function createOrFetchSecretInDB(email: string, freshSecret: string): Prom
     const doc = await TotpSecretModel.findOneAndUpdate(
       { email },
       { $setOnInsert: { email, secret: freshSecret } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     ).lean();
     return doc?.secret ?? null;
   } catch (err) {

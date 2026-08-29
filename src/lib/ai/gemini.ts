@@ -43,16 +43,28 @@ export async function generateJson<T>(options: {
   system: string;
   user: string;
   temperature?: number;
+  thinkingBudget?: number;
 }): Promise<T> {
   const ai = getGeminiClient();
+  
+  const config: Record<string, unknown> = {
+    systemInstruction: options.system,
+    responseMimeType: "application/json",
+    temperature: options.temperature ?? 0.7,
+  };
+
+  // If running on models that support thinkingConfig, minimize thinking latency for JSON extraction
+  if (options.thinkingBudget !== undefined) {
+    config.thinkingConfig = { thinkingBudget: options.thinkingBudget };
+  } else {
+    // Default 0 budget for instant structured data / JSON generation without 20s thinking delay
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
   const response = await ai.models.generateContent({
     model: GEMINI_TEXT_MODEL,
     contents: [{ role: "user", parts: [{ text: options.user }] }],
-    config: {
-      systemInstruction: options.system,
-      responseMimeType: "application/json",
-      temperature: options.temperature ?? 0.7,
-    },
+    config,
   });
   return JSON.parse(stripCodeFences(response.text || "{}")) as T;
 }
