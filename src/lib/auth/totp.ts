@@ -1,5 +1,6 @@
 import { generateSecret, generateURI, verifySync } from "otplib";
 import QRCode from "qrcode";
+import { connectDB } from "@/lib/db/client";
 import { TotpSecretModel } from "@/lib/db/models/totp-secret.model";
 
 /**
@@ -25,30 +26,37 @@ if (!globalThis.totpSecretCache) {
 
 async function loadSecretFromDB(email: string): Promise<string | null> {
   try {
+    await connectDB();
     const doc = await TotpSecretModel.findOne({ email }).lean();
     return doc?.secret ?? null;
   } catch (err) {
-    console.warn("TOTP: could not read secret from DB, falling back to cache:", err);
-    return null;
+    console.error("TOTP: could not read the saved authenticator secret:", err);
+    throw new TotpStorageError();
   }
 }
 
 /**
  * Atomically create the secret if the email has none yet, otherwise return
  * the existing one (two concurrent setups converge on a single secret).
- * Returns null if the database is unreachable.
+ * Throws if the secret cannot be durably read or written.
  */
-async function createOrFetchSecretInDB(email: string, freshSecret: string): Promise<string | null> {
+async function createOrFetchSecretInDB(email: string, freshSecret: string): Promise<string> {
   try {
+    await connectDB();
     const doc = await TotpSecretModel.findOneAndUpdate(
       { email },
       { $setOnInsert: { email, secret: freshSecret } },
-      { upsert: true, returnDocument: 'after' }
+      { upsert: true, returnDocument: "after" }
     ).lean();
-    return doc?.secret ?? null;
+
+    if (!doc?.secret) {
+      throw new Error("TOTP secret upsert returned no secret");
+    }
+
+    return doc.secret;
   } catch (err) {
-    console.warn("TOTP: could not persist secret to DB, using in-memory fallback:", err);
-    return null;
+    console.error("TOTP: could not persist the authenticator secret:", err);
+    throw new TotpStorageError();
   }
 }
 
@@ -78,30 +86,32 @@ export async function getOrCreateTOTPSecret(
 ): Promise<{ secret: string; qrCodeUrl: string; isNew: boolean }> {
   const normalizedEmail = email.toLowerCase().trim();
 
-  // 1. Fast path: already known to this process
-  let secret = secretCache.get(normalizedEmail) ?? null;
-  let isNew = false;
-
-  // 2. Database lookup
-  if (!secret) {
-    secret = await loadSecretFromDB(normalizedEmail);
-  }
-
-  // 3. Mint a new secret (atomic upsert so races return the stored one)
-  if (!secret) {
-    const fresh = generateSecret();
-    const stored = await createOrFetchSecretInDB(normalizedEmail, fresh);
-    secret = stored ?? fresh;
-    // If the upsert returned exactly what we minted (or DB was down), it's new
-    isNew = stored === null || stored === fresh;
-  }
+  // Always reconcile setup with MongoDB. In addition to handling concurrent
+  // requests, this persists any secret that an older server version placed
+  // only in the process cache before the database-connection regression was
+  // fixed.
+  const cachedSecret = secretCache.get(normalizedEmail);
+  const candidateSecret = cachedSecret ?? generateSecret();
+  const secret = await createOrFetchSecretInDB(normalizedEmail, candidateSecret);
+  const isNew = !cachedSecret && secret === candidateSecret;
 
   secretCache.set(normalizedEmail, secret);
   const qrCodeUrl = await buildQrCodeUrl(normalizedEmail, secret);
   return { secret, qrCodeUrl, isNew };
 }
 
-export type TotpVerification = "valid" | "invalid-code" | "not-registered";
+export class TotpStorageError extends Error {
+  constructor() {
+    super("Authenticator storage is temporarily unavailable");
+    this.name = "TotpStorageError";
+  }
+}
+
+export type TotpVerification =
+  | "valid"
+  | "invalid-code"
+  | "not-registered"
+  | "service-unavailable";
 
 /**
  * Verify a 6-digit TOTP code against the user's stored secret.
@@ -112,7 +122,14 @@ export async function verifyTOTPToken(email: string, token: string): Promise<Tot
 
   let secret = secretCache.get(normalizedEmail) ?? null;
   if (!secret) {
-    secret = await loadSecretFromDB(normalizedEmail);
+    try {
+      secret = await loadSecretFromDB(normalizedEmail);
+    } catch (error) {
+      if (error instanceof TotpStorageError) {
+        return "service-unavailable";
+      }
+      throw error;
+    }
     if (secret) secretCache.set(normalizedEmail, secret);
   }
 

@@ -14,6 +14,7 @@ import {
   Bold,
   BringToFront,
   CaseUpper,
+  ChevronDown,
   ClipboardPaste,
   Copy,
   Download,
@@ -342,8 +343,21 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
   const [tool, setToolState] = useState<Tool>("select");
   const [activeObj, setActiveObj] = useState<fabric.FabricObject | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement | null>(null);
+  const [lockAspect, setLockAspect] = useState(true);
   const [objects, setObjects] = useState<fabric.FabricObject[]>([]);
   const [histState, setHistState] = useState({ index: -1, length: 0 });
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [exportOpen]);
 
   const syncObjects = useCallback(() => {
     const c = fabricRef.current;
@@ -1398,52 +1412,53 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
         </div>
 
         {/* Export */}
-        <div className="relative ml-auto">
+        <div ref={exportRef} className="relative ml-auto">
           <button
             type="button"
             onClick={() => setExportOpen((o) => !o)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-neutral-200 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-neutral-200 cursor-pointer transition-colors shadow-sm"
           >
             <Download className="w-3.5 h-3.5" />
             Export
+            <ChevronDown className={`w-3 h-3 transition-transform ${exportOpen ? "rotate-180" : ""}`} />
           </button>
           {exportOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl z-30 p-1.5 space-y-0.5">
-              <button type="button" onClick={() => exportPNG(1, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                PNG — 1× resolution
+            <div className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl z-50 p-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+              <button type="button" onClick={() => exportPNG(1, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-200 hover:bg-neutral-800 hover:text-white cursor-pointer transition-colors">
+                PNG — 1× standard
               </button>
-              <button type="button" onClick={() => exportPNG(2, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                PNG — 2× high-res
+              <button type="button" onClick={() => exportPNG(2, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-200 hover:bg-neutral-800 hover:text-white cursor-pointer transition-colors">
+                PNG — 2× high-res (2000px)
               </button>
-              <button type="button" onClick={() => exportPNG(4, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                PNG — 4× ultra
+              <button type="button" onClick={() => exportPNG(4, false)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-200 hover:bg-neutral-800 hover:text-white cursor-pointer transition-colors">
+                PNG — 4× ultra (4000px)
               </button>
-              <button type="button" onClick={() => exportPNG(2, true)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                PNG — transparent 2×
+              <button type="button" onClick={() => exportPNG(2, true)} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-amber-300 hover:bg-neutral-800 hover:text-amber-200 cursor-pointer transition-colors">
+                PNG — transparent (2×)
               </button>
-              <button type="button" onClick={exportJPG} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                JPG — 2×
+              <button type="button" onClick={exportJPG} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-200 hover:bg-neutral-800 hover:text-white cursor-pointer transition-colors">
+                JPG — 2× high-res
               </button>
-              <button type="button" onClick={exportSVG} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
-                SVG — vector
+              <button type="button" onClick={exportSVG} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-emerald-300 hover:bg-neutral-800 hover:text-emerald-200 cursor-pointer transition-colors">
+                SVG — scalable vector
               </button>
-              <button type="button" onClick={copyPngToClipboard} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer">
+              <button type="button" onClick={copyPngToClipboard} className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-cyan-300 hover:bg-neutral-800 hover:text-cyan-200 cursor-pointer transition-colors">
                 Copy PNG to clipboard
               </button>
-              <div className="border-t border-neutral-900 my-1" />
+              <div className="border-t border-neutral-800 my-1" />
               <button
                 type="button"
                 onClick={exportJSON}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer flex items-center gap-1.5"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800 hover:text-white cursor-pointer flex items-center gap-1.5 transition-colors"
               >
-                <FileJson className="w-3.5 h-3.5" /> Save design (.json)
+                <FileJson className="w-3.5 h-3.5 text-neutral-400" /> Save design (.json)
               </button>
               <button
                 type="button"
                 onClick={() => jsonInputRef.current?.click()}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-900 hover:text-white cursor-pointer flex items-center gap-1.5"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800 hover:text-white cursor-pointer flex items-center gap-1.5 transition-colors"
               >
-                <FolderOpen className="w-3.5 h-3.5" /> Load design (.json)
+                <FolderOpen className="w-3.5 h-3.5 text-neutral-400" /> Load design (.json)
               </button>
             </div>
           )}
@@ -2083,8 +2098,8 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
                 </Section>
               )}
 
-              {/* Transform */}
-              <Section title="Transform">
+              {/* Transform & Scale */}
+              <Section title="Transform & Scale">
                 <div className="grid grid-cols-2 gap-2">
                   <NumField
                     label="X (center)"
@@ -2122,7 +2137,13 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
                     min={1}
                     onChange={(v) => {
                       if (v > 0) {
-                        active.scaleToWidth(v);
+                        const curW = active.getScaledWidth();
+                        if (lockAspect && curW > 0) {
+                          const ratio = v / curW;
+                          active.scale((active.scaleX ?? 1) * ratio);
+                        } else {
+                          active.scaleToWidth(v);
+                        }
                         active.setCoords();
                         fabricRef.current?.requestRenderAll();
                         scheduleHistory();
@@ -2136,7 +2157,13 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
                     min={1}
                     onChange={(v) => {
                       if (v > 0) {
-                        active.scaleToHeight(v);
+                        const curH = active.getScaledHeight();
+                        if (lockAspect && curH > 0) {
+                          const ratio = v / curH;
+                          active.scale((active.scaleY ?? 1) * ratio);
+                        } else {
+                          active.scaleToHeight(v);
+                        }
                         active.setCoords();
                         fabricRef.current?.requestRenderAll();
                         scheduleHistory();
@@ -2145,6 +2172,65 @@ export function LogoEditor({ logo, onClose }: LogoEditorProps) {
                     }}
                   />
                 </div>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10px] font-mono uppercase text-neutral-500">Uniform Scale</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        active.scale((active.scaleX ?? 1) * 0.9);
+                        active.setCoords();
+                        fabricRef.current?.requestRenderAll();
+                        scheduleHistory();
+                        forceRender();
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-black border border-neutral-800 hover:border-neutral-700 text-[10px] font-mono text-neutral-400 hover:text-white cursor-pointer transition-colors"
+                      title="Scale down 10%"
+                    >
+                      -10%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        active.scale((active.scaleX ?? 1) * 1.1);
+                        active.setCoords();
+                        fabricRef.current?.requestRenderAll();
+                        scheduleHistory();
+                        forceRender();
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-black border border-neutral-800 hover:border-neutral-700 text-[10px] font-mono text-neutral-400 hover:text-white cursor-pointer transition-colors"
+                      title="Scale up 10%"
+                    >
+                      +10%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        active.scale((active.scaleX ?? 1) * 1.25);
+                        active.setCoords();
+                        fabricRef.current?.requestRenderAll();
+                        scheduleHistory();
+                        forceRender();
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-black border border-neutral-800 hover:border-neutral-700 text-[10px] font-mono text-neutral-400 hover:text-white cursor-pointer transition-colors"
+                      title="Scale up 25%"
+                    >
+                      +25%
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLockAspect((l) => !l)}
+                  className={`w-full py-1 rounded-lg text-[10px] font-mono border cursor-pointer flex items-center justify-center gap-1.5 transition-colors ${
+                    lockAspect
+                      ? "bg-neutral-900 border-neutral-700 text-blue-400"
+                      : "bg-black border-neutral-800 text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  <Lock className="w-3 h-3" />
+                  {lockAspect ? "Aspect Ratio: Locked" : "Aspect Ratio: Freeform"}
+                </button>
                 <SliderRow
                   label="Rotation"
                   value={Math.round(active.angle ?? 0)}

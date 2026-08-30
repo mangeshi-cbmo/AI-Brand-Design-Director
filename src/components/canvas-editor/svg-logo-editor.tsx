@@ -5,15 +5,13 @@ import {
   AlignCenter,
   ArrowDown,
   ArrowUp,
-  Bold,
-  Check,
   ChevronDown,
   Copy,
   Download,
   Eye,
   EyeOff,
+  FileCode,
   FileJson,
-  FlipHorizontal2,
   Grid3X3,
   Layers,
   Lock,
@@ -25,12 +23,14 @@ import {
   Plus,
   Redo2,
   RotateCcw,
+  Sparkles,
   Trash2,
   Type,
   Undo2,
   X,
   ZoomIn,
   ZoomOut,
+  Image as ImageIcon,
 } from "lucide-react";
 import { LogoData, LogoLayer, LogoPaletteColor, LogoFont } from "@/types/logo";
 import { loadLogoFonts, LOGO_FONTS } from "@/lib/fonts/font-loader";
@@ -86,7 +86,8 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   const [activePanel, setActivePanel] = useState<"layers" | "palette" | null>("layers");
   const [showGrid, setShowGrid] = useState(false);
   const [exportDropdown, setExportDropdown] = useState(false);
-  const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [, setFontsLoaded] = useState(false);
+  const [lockAspect, setLockAspect] = useState(true);
 
   // History (undo/redo)
   const [history, setHistory] = useState<HistoryEntry[]>([
@@ -94,7 +95,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   ]);
   const [historyIdx, setHistoryIdx] = useState(0);
 
-  // Drag state
+  // Drag & Resize state
   const [dragInfo, setDragInfo] = useState<{
     layerId: string;
     startX: number;
@@ -103,8 +104,21 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
     origY: number;
   } | null>(null);
 
+  const [resizeInfo, setResizeInfo] = useState<{
+    layerId: string;
+    handle: "nw" | "ne" | "se" | "sw";
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    origW: number;
+    origH: number;
+    origFontSize?: number;
+  } | null>(null);
+
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   // Font loading
   useEffect(() => {
@@ -112,13 +126,29 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fit zoom
-  useEffect(() => {
+  const zoomToFit = useCallback(() => {
     if (!containerRef.current) return;
     const { clientWidth, clientHeight } = containerRef.current;
     const scaleX = (clientWidth - 80) / canvasWidth;
     const scaleY = (clientHeight - 80) / canvasHeight;
-    setZoom(Math.min(scaleX, scaleY, 1));
+    setZoom(Math.max(0.1, Math.min(scaleX, scaleY, 1.5)));
   }, [canvasWidth, canvasHeight]);
+
+  useEffect(() => {
+    zoomToFit();
+  }, [zoomToFit]);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!exportDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportDropdown(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [exportDropdown]);
 
   // Selected layer helper
   const selectedLayer = layers.find((l) => l.id === selectedLayerId) || null;
@@ -158,7 +188,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   }, [history, historyIdx]);
 
   /* ---------------------------------------------------------------- */
-  /* Layer CRUD                                                         */
+  /* Layer CRUD & Transforms                                            */
   /* ---------------------------------------------------------------- */
   const updateLayer = useCallback(
     (id: string, patch: Partial<LogoLayer>) => {
@@ -169,6 +199,74 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       });
     },
     [pushHistory]
+  );
+
+  const scaleLayer = useCallback(
+    (id: string, multiplier: number) => {
+      setLayers((prev) => {
+        const next = prev.map((l) => {
+          if (l.id !== id) return l;
+          const newW = Math.max(10, Math.round(l.width * multiplier));
+          const newH = Math.max(10, Math.round(l.height * multiplier));
+          const patch: Partial<LogoLayer> = { width: newW, height: newH };
+          if (l.type === "text" && l.fontSize) {
+            patch.fontSize = Math.max(6, Math.round(l.fontSize * multiplier));
+          }
+          return { ...l, ...patch };
+        });
+        pushHistory(next);
+        return next;
+      });
+    },
+    [pushHistory]
+  );
+
+  const setLayerWidth = useCallback(
+    (id: string, newW: number) => {
+      setLayers((prev) => {
+        const next = prev.map((l) => {
+          if (l.id !== id) return l;
+          const clampedW = Math.max(5, Math.round(newW));
+          if (lockAspect && l.width > 0) {
+            const ratio = clampedW / l.width;
+            const newH = Math.max(5, Math.round(l.height * ratio));
+            const patch: Partial<LogoLayer> = { width: clampedW, height: newH };
+            if (l.type === "text" && l.fontSize) {
+              patch.fontSize = Math.max(6, Math.round(l.fontSize * ratio));
+            }
+            return { ...l, ...patch };
+          }
+          return { ...l, width: clampedW };
+        });
+        pushHistory(next);
+        return next;
+      });
+    },
+    [lockAspect, pushHistory]
+  );
+
+  const setLayerHeight = useCallback(
+    (id: string, newH: number) => {
+      setLayers((prev) => {
+        const next = prev.map((l) => {
+          if (l.id !== id) return l;
+          const clampedH = Math.max(5, Math.round(newH));
+          if (lockAspect && l.height > 0) {
+            const ratio = clampedH / l.height;
+            const newW = Math.max(5, Math.round(l.width * ratio));
+            const patch: Partial<LogoLayer> = { width: newW, height: clampedH };
+            if (l.type === "text" && l.fontSize) {
+              patch.fontSize = Math.max(6, Math.round(l.fontSize * ratio));
+            }
+            return { ...l, ...patch };
+          }
+          return { ...l, height: clampedH };
+        });
+        pushHistory(next);
+        return next;
+      });
+    },
+    [lockAspect, pushHistory]
   );
 
   const deleteLayer = useCallback(
@@ -208,15 +306,15 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       id: `text-${Date.now()}`,
       type: "text",
       label: "New Text",
-      content: "Text",
+      content: "Brand Text",
       x: canvasWidth / 2,
       y: canvasHeight / 2,
-      width: 200,
-      height: 50,
-      fill: palette.find((c) => c.role === "text")?.hex || "#000000",
+      width: 220,
+      height: 60,
+      fill: palette.find((c) => c.role === "text")?.hex || "#ffffff",
       fontFamily: fontRecs[0]?.family || "Inter",
       fontSize: 36,
-      fontWeight: 600,
+      fontWeight: 700,
       letterSpacing: 0,
       textAnchor: "middle",
       opacity: 1,
@@ -241,8 +339,8 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       viewBox: "0 0 100 100",
       x: canvasWidth / 2,
       y: canvasHeight / 2,
-      width: 100,
-      height: 100,
+      width: 120,
+      height: 120,
       fill: palette.find((c) => c.role === "primary")?.hex || "#3B82F6",
       opacity: 1,
       rotation: 0,
@@ -285,17 +383,48 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   );
 
   /* ---------------------------------------------------------------- */
-  /* Drag on SVG canvas                                                 */
+  /* Drag & Interactive Scale on Canvas                                 */
   /* ---------------------------------------------------------------- */
+  const handleResizePointerDown = (
+    e: React.PointerEvent,
+    layer: LogoLayer,
+    handle: "nw" | "ne" | "se" | "sw"
+  ) => {
+    e.stopPropagation();
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const svgPt = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+
+    setResizeInfo({
+      layerId: layer.id,
+      handle,
+      startX: svgPt.x,
+      startY: svgPt.y,
+      origX: layer.x,
+      origY: layer.y,
+      origW: layer.width,
+      origH: layer.height,
+      origFontSize: layer.fontSize,
+    });
+
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+  };
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const svg = svgRef.current;
       if (!svg) return;
 
-      // Find clicked layer
       const target = e.target as SVGElement;
-      const layerEl = target.closest("[data-layer-id]") as SVGElement | null;
+      if (target.getAttribute("data-handle-ui") === "true") {
+        return; // Handled by handleResizePointerDown
+      }
 
+      const layerEl = target.closest("[data-layer-id]") as SVGElement | null;
       if (!layerEl) {
         setSelectedLayerId(null);
         return;
@@ -332,33 +461,82 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
 
   const handleCanvasPointerMove = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      if (!dragInfo || !svgRef.current) return;
+      const svg = svgRef.current;
+      if (!svg) return;
 
-      const pt = svgRef.current.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const svgPt = pt.matrixTransform(svgRef.current.getScreenCTM()?.inverse());
+      // Handle interactive corner resize
+      if (resizeInfo) {
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const svgPt = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+        const dx = svgPt.x - resizeInfo.startX;
+        const dy = svgPt.y - resizeInfo.startY;
 
-      const dx = svgPt.x - dragInfo.startX;
-      const dy = svgPt.y - dragInfo.startY;
+        let scale = 1;
+        if (resizeInfo.handle === "se") {
+          const sx = (resizeInfo.origW + dx) / resizeInfo.origW;
+          const sy = (resizeInfo.origH + dy) / resizeInfo.origH;
+          scale = Math.max(0.1, (sx + sy) / 2);
+        } else if (resizeInfo.handle === "nw") {
+          const sx = (resizeInfo.origW - dx) / resizeInfo.origW;
+          const sy = (resizeInfo.origH - dy) / resizeInfo.origH;
+          scale = Math.max(0.1, (sx + sy) / 2);
+        } else if (resizeInfo.handle === "ne") {
+          const sx = (resizeInfo.origW + dx) / resizeInfo.origW;
+          const sy = (resizeInfo.origH - dy) / resizeInfo.origH;
+          scale = Math.max(0.1, (sx + sy) / 2);
+        } else if (resizeInfo.handle === "sw") {
+          const sx = (resizeInfo.origW - dx) / resizeInfo.origW;
+          const sy = (resizeInfo.origH + dy) / resizeInfo.origH;
+          scale = Math.max(0.1, (sx + sy) / 2);
+        }
 
-      setLayers((prev) =>
-        prev.map((l) =>
-          l.id === dragInfo.layerId
-            ? { ...l, x: Math.round(dragInfo.origX + dx), y: Math.round(dragInfo.origY + dy) }
-            : l
-        )
-      );
+        const newW = Math.max(10, Math.round(resizeInfo.origW * scale));
+        const newH = Math.max(10, Math.round(resizeInfo.origH * scale));
+
+        setLayers((prev) =>
+          prev.map((l) => {
+            if (l.id !== resizeInfo.layerId) return l;
+            const patch: Partial<LogoLayer> = { width: newW, height: newH };
+            if (l.type === "text" && resizeInfo.origFontSize) {
+              patch.fontSize = Math.max(6, Math.round(resizeInfo.origFontSize * scale));
+            }
+            return { ...l, ...patch };
+          })
+        );
+        return;
+      }
+
+      // Handle layer drag / move
+      if (dragInfo) {
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const svgPt = pt.matrixTransform(svg.getScreenCTM()?.inverse());
+
+        const dx = svgPt.x - dragInfo.startX;
+        const dy = svgPt.y - dragInfo.startY;
+
+        setLayers((prev) =>
+          prev.map((l) =>
+            l.id === dragInfo.layerId
+              ? { ...l, x: Math.round(dragInfo.origX + dx), y: Math.round(dragInfo.origY + dy) }
+              : l
+          )
+        );
+      }
     },
-    [dragInfo]
+    [dragInfo, resizeInfo]
   );
 
   const handleCanvasPointerUp = useCallback(() => {
-    if (dragInfo) {
+    if (dragInfo || resizeInfo) {
       pushHistory(layers);
     }
     setDragInfo(null);
-  }, [dragInfo, layers, pushHistory]);
+    setResizeInfo(null);
+  }, [dragInfo, resizeInfo, layers, pushHistory]);
 
   /* ---------------------------------------------------------------- */
   /* Keyboard shortcuts                                                 */
@@ -374,6 +552,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       }
       if (e.key === "Escape") {
         setSelectedLayerId(null);
+        setExportDropdown(false);
       }
     };
     window.addEventListener("keydown", handler);
@@ -381,21 +560,36 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   }, [undo, redo, selectedLayerId, deleteLayer]);
 
   /* ---------------------------------------------------------------- */
-  /* Export                                                              */
+  /* High-Fidelity Export                                               */
   /* ---------------------------------------------------------------- */
-  const buildSvgString = useCallback(() => {
+  const buildSvgString = useCallback((transparentBg = false) => {
     const svgEl = svgRef.current;
     if (!svgEl) return "";
     const clone = svgEl.cloneNode(true) as SVGSVGElement;
-    // Remove selection UI elements
+
+    // Clean out all selection and editing UI
     clone.querySelectorAll("[data-selection-ui]").forEach((el) => el.remove());
     clone.querySelectorAll("[data-grid-ui]").forEach((el) => el.remove());
+    clone.querySelectorAll("[data-handle-ui]").forEach((el) => el.remove());
+
+    // CRITICAL: Strip viewport zoom styles & shadows to ensure 100% clean export scale
+    clone.removeAttribute("style");
+    clone.setAttribute("width", String(canvasWidth));
+    clone.setAttribute("height", String(canvasHeight));
+    clone.setAttribute("viewBox", `0 0 ${canvasWidth} ${canvasHeight}`);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+
+    if (transparentBg) {
+      const bgRect = clone.querySelector("[data-bg-rect]");
+      if (bgRect) bgRect.setAttribute("fill", "none");
+    }
+
     return new XMLSerializer().serializeToString(clone);
-  }, []);
+  }, [canvasWidth, canvasHeight]);
 
   const exportSvg = useCallback(() => {
-    const svgStr = buildSvgString();
-    const blob = new Blob([svgStr], { type: "image/svg+xml" });
+    const svgStr = buildSvgString(false);
+    const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -407,11 +601,11 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
     setExportDropdown(false);
   }, [buildSvgString, logoData.brandName]);
 
-  const exportPng = useCallback(() => {
-    const svgStr = buildSvgString();
+  const exportPng = useCallback((multiplier = 2, transparent = false) => {
+    const svgStr = buildSvgString(transparent);
     const canvas = document.createElement("canvas");
-    canvas.width = canvasWidth * 2;
-    canvas.height = canvasHeight * 2;
+    canvas.width = canvasWidth * multiplier;
+    canvas.height = canvasHeight * multiplier;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -421,14 +615,68 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       const dataUrl = canvas.toDataURL("image/png");
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `${(logoData.brandName || "logo").toLowerCase().replace(/\s+/g, "-")}.png`;
+      const suffix = transparent ? "-transparent" : multiplier > 1 ? `@${multiplier}x` : "";
+      a.download = `${(logoData.brandName || "logo").toLowerCase().replace(/\s+/g, "-")}${suffix}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     };
-    img.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
+    img.src = `data:image/svg+xml;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
     setExportDropdown(false);
   }, [buildSvgString, canvasWidth, canvasHeight, logoData.brandName]);
+
+  const exportJpg = useCallback(() => {
+    const svgStr = buildSvgString(false);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasWidth * 2;
+    canvas.height = canvasHeight * 2;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = backgroundColor && backgroundColor !== "transparent" ? backgroundColor : "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `${(logoData.brandName || "logo").toLowerCase().replace(/\s+/g, "-")}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    img.src = `data:image/svg+xml;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
+    setExportDropdown(false);
+  }, [buildSvgString, canvasWidth, canvasHeight, backgroundColor, logoData.brandName]);
+
+  const copyPngToClipboard = useCallback(async () => {
+    try {
+      const svgStr = buildSvgString(false);
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasWidth * 2;
+      canvas.height = canvasHeight * 2;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = `data:image/svg+xml;charset=utf-8;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
+      });
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(async (blob) => {
+        if (blob && navigator.clipboard?.write) {
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        }
+      }, "image/png");
+    } catch (err) {
+      console.error("Failed to copy image to clipboard", err);
+    }
+    setExportDropdown(false);
+  }, [buildSvgString, canvasWidth, canvasHeight]);
 
   const exportJson = useCallback(() => {
     const data: LogoData = {
@@ -452,12 +700,65 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   }, [logoData, layers, backgroundColor, canvasWidth, canvasHeight, palette]);
 
   /* ---------------------------------------------------------------- */
-  /* SVG layer rendering                                                */
+  /* SVG layer rendering with Interactive Scale Handles                 */
   /* ---------------------------------------------------------------- */
+  const renderSelectionHandles = (layer: LogoLayer, translateX: number, translateY: number) => {
+    if (layer.id !== selectedLayerId || layer.locked) return null;
+    const pad = 6 / zoom;
+    const handleSize = 9 / zoom;
+    const halfH = handleSize / 2;
+    const x1 = translateX - pad;
+    const y1 = translateY - pad;
+    const w = layer.width + pad * 2;
+    const h = layer.height + pad * 2;
+
+    const handles = [
+      { id: "nw", cx: x1, cy: y1, cursor: "nwse-resize" },
+      { id: "ne", cx: x1 + w, cy: y1, cursor: "nesw-resize" },
+      { id: "se", cx: x1 + w, cy: y1 + h, cursor: "nwse-resize" },
+      { id: "sw", cx: x1, cy: y1 + h, cursor: "nesw-resize" },
+    ];
+
+    return (
+      <g data-selection-ui="true">
+        {/* Bounding box outline */}
+        <rect
+          x={x1}
+          y={y1}
+          width={w}
+          height={h}
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth={1.5 / zoom}
+          strokeDasharray={`${5 / zoom} ${3 / zoom}`}
+          rx={3 / zoom}
+          style={{ pointerEvents: "none" }}
+        />
+        {/* 4 Interactive Corner Scale Handles */}
+        {handles.map((hnd) => (
+          <rect
+            key={hnd.id}
+            data-handle-ui="true"
+            data-handle={hnd.id}
+            x={hnd.cx - halfH}
+            y={hnd.cy - halfH}
+            width={handleSize}
+            height={handleSize}
+            fill="#ffffff"
+            stroke="#2563EB"
+            strokeWidth={1.5 / zoom}
+            rx={2 / zoom}
+            style={{ cursor: hnd.cursor, pointerEvents: "all" }}
+            onPointerDown={(e) => handleResizePointerDown(e, layer, hnd.id as "nw" | "ne" | "se" | "sw")}
+          />
+        ))}
+      </g>
+    );
+  };
+
   const renderSvgLayer = useCallback(
     (layer: LogoLayer) => {
       if (!layer.visible) return null;
-      const isSelected = layer.id === selectedLayerId;
       const opacity = layer.opacity;
 
       if (layer.type === "text") {
@@ -465,13 +766,15 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
         const textX = anchor === "middle" ? layer.x : layer.x - layer.width / 2;
         const textY = layer.y;
         const transform = layer.rotation ? `rotate(${layer.rotation}, ${layer.x}, ${layer.y})` : undefined;
+        const translateX = layer.x - layer.width / 2;
+        const translateY = layer.y - (layer.fontSize || 48) / 2;
 
         return (
           <g key={layer.id} data-layer-id={layer.id} style={{ cursor: layer.locked ? "default" : "move" }}>
             {/* Hit area */}
             <rect
-              x={layer.x - layer.width / 2}
-              y={layer.y - (layer.fontSize || 48) / 2 - 8}
+              x={translateX}
+              y={translateY - 8}
               width={layer.width}
               height={(layer.fontSize || 48) + 16}
               fill="transparent"
@@ -479,7 +782,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
             />
             <text
               x={textX}
-              y={textY}
+              y={textY + (layer.fontSize || 48) * 0.35}
               fill={layer.fill}
               fontFamily={`'${layer.fontFamily || "Inter"}', sans-serif`}
               fontSize={layer.fontSize || 48}
@@ -487,29 +790,15 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
               letterSpacing={layer.letterSpacing || 0}
               textAnchor={anchor}
               dominantBaseline="central"
-              opacity={opacity}
-              transform={transform}
               stroke={layer.stroke}
               strokeWidth={layer.strokeWidth}
-              style={{ pointerEvents: "auto" }}
+              opacity={opacity}
+              transform={transform}
+              style={{ userSelect: "none", pointerEvents: "auto" }}
             >
-              {layer.content || ""}
+              {layer.content || "Text"}
             </text>
-            {/* Selection outline */}
-            {isSelected && (
-              <rect
-                data-selection-ui="true"
-                x={layer.x - layer.width / 2 - 4}
-                y={layer.y - (layer.fontSize || 48) / 2 - 12}
-                width={layer.width + 8}
-                height={(layer.fontSize || 48) + 24}
-                fill="none"
-                stroke="#3B82F6"
-                strokeWidth={2 / zoom}
-                strokeDasharray={`${4 / zoom}`}
-                rx={4 / zoom}
-              />
-            )}
+            {renderSelectionHandles(layer, translateX, translateY - 8)}
           </g>
         );
       }
@@ -545,98 +834,140 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
               transform={pathTransform}
               style={{ pointerEvents: "auto" }}
             />
-            {isSelected && (
-              <rect
-                data-selection-ui="true"
-                x={translateX - 4 / zoom}
-                y={translateY - 4 / zoom}
-                width={layer.width + 8 / zoom}
-                height={layer.height + 8 / zoom}
-                fill="none"
-                stroke="#3B82F6"
-                strokeWidth={2 / zoom}
-                strokeDasharray={`${4 / zoom}`}
-                rx={4 / zoom}
-              />
-            )}
+            {renderSelectionHandles(layer, translateX, translateY)}
           </g>
         );
       }
 
       return null;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedLayerId, zoom]
   );
 
   /* ---------------------------------------------------------------- */
-  /* Render                                                             */
+  /* Render UI                                                          */
   /* ---------------------------------------------------------------- */
   return (
-    <div className="w-full h-[calc(100vh-180px)] min-h-[600px] flex flex-col rounded-2xl border border-neutral-800 bg-neutral-950 overflow-hidden">
-      {/* ── Top Toolbar ── */}
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 border-b border-neutral-800 bg-neutral-900/50 overflow-x-auto max-w-full gap-2 shrink-0">
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+    <div className="w-full h-[calc(100vh-160px)] min-h-[620px] flex flex-col rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl overflow-visible">
+      {/* ── Top Toolbar (Clean, No Scrollbar, High Z-Index) ── */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between px-3 sm:px-4 py-2 border-b border-neutral-800 bg-neutral-900/90 gap-2 shrink-0 relative z-30 rounded-t-2xl">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 flex-wrap">
           {/* Undo / Redo */}
-          <ToolBtn icon={<Undo2 className="w-4 h-4" />} label="Undo" onClick={undo} disabled={historyIdx <= 0} />
-          <ToolBtn icon={<Redo2 className="w-4 h-4" />} label="Redo" onClick={redo} disabled={historyIdx >= history.length - 1} />
-          <div className="w-px h-5 bg-neutral-800 mx-0.5 sm:mx-1" />
+          <ToolBtn icon={<Undo2 className="w-4 h-4" />} label="Undo (Ctrl+Z)" onClick={undo} disabled={historyIdx <= 0} />
+          <ToolBtn icon={<Redo2 className="w-4 h-4" />} label="Redo (Ctrl+Y)" onClick={redo} disabled={historyIdx >= history.length - 1} />
+          <div className="w-px h-5 bg-neutral-800 mx-1" />
 
           {/* Add layers */}
           <ToolBtn icon={<Type className="w-4 h-4" />} label="Add Text" onClick={addTextLayer} />
           <ToolBtn icon={<div className="w-4 h-4 rounded-full border-2 border-current" />} label="Add Shape" onClick={addShapeLayer} />
-          <div className="w-px h-5 bg-neutral-800 mx-0.5 sm:mx-1" />
+          <div className="w-px h-5 bg-neutral-800 mx-1" />
 
           {/* View controls */}
-          <ToolBtn icon={<Grid3X3 className="w-4 h-4" />} label="Grid" onClick={() => setShowGrid(!showGrid)} active={showGrid} />
-          <ToolBtn icon={<Maximize2 className="w-4 h-4" />} label="Fit" onClick={() => {
-            if (!containerRef.current) return;
-            const { clientWidth, clientHeight } = containerRef.current;
-            setZoom(Math.min((clientWidth - 80) / canvasWidth, (clientHeight - 80) / canvasHeight, 1));
-          }} />
+          <ToolBtn icon={<Grid3X3 className="w-4 h-4" />} label="Toggle Grid" onClick={() => setShowGrid(!showGrid)} active={showGrid} />
+          <ToolBtn icon={<Maximize2 className="w-4 h-4" />} label="Fit Canvas" onClick={zoomToFit} />
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* Zoom */}
-          <div className="flex items-center gap-1 bg-neutral-900 rounded-lg px-2 py-1 border border-neutral-800">
-            <button onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} className="p-0.5 text-neutral-400 hover:text-white cursor-pointer">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {/* Zoom / Scale Toolbar */}
+          <div className="flex items-center gap-1 bg-neutral-950 rounded-lg px-2 py-1 border border-neutral-800">
+            <button
+              onClick={() => setZoom((z) => Math.max(0.1, Number((z - 0.1).toFixed(2))))}
+              className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded"
+              title="Zoom Out"
+            >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] font-mono text-neutral-300 w-10 text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => setZoom((z) => Math.min(3, z + 0.1))} className="p-0.5 text-neutral-400 hover:text-white cursor-pointer">
+            <span
+              onClick={() => setZoom(1)}
+              className="text-[11px] font-mono text-neutral-300 w-11 text-center cursor-pointer hover:text-blue-400"
+              title="Click to reset 100%"
+            >
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              onClick={() => setZoom((z) => Math.min(3, Number((z + 0.1).toFixed(2))))}
+              className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer rounded"
+              title="Zoom In"
+            >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Export */}
-          <div className="relative">
+          {/* Export Dropdown with Outside-Click and Full Menu */}
+          <div ref={exportRef} className="relative">
             <button
               onClick={() => setExportDropdown(!exportDropdown)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-black text-xs font-semibold hover:bg-neutral-200 transition-colors cursor-pointer shadow-sm"
             >
               <Download className="w-3.5 h-3.5" />
               Export
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className={`w-3 h-3 transition-transform ${exportDropdown ? "rotate-180" : ""}`} />
             </button>
             {exportDropdown && (
-              <div className="absolute right-0 top-full mt-1 w-48 rounded-xl bg-neutral-900 border border-neutral-800 shadow-2xl z-50 py-1 overflow-hidden">
-                <ExportItem icon={<Download className="w-4 h-4" />} label="Download SVG" desc="Vector format" onClick={exportSvg} />
-                <ExportItem icon={<Download className="w-4 h-4" />} label="Download PNG" desc="2× resolution" onClick={exportPng} />
-                <ExportItem icon={<FileJson className="w-4 h-4" />} label="Export JSON" desc="Editable data" onClick={exportJson} />
+              <div className="absolute right-0 top-full mt-1.5 w-60 rounded-xl bg-neutral-900 border border-neutral-800 shadow-2xl z-50 p-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100">
+                <ExportItem
+                  icon={<FileCode className="w-4 h-4 text-emerald-400" />}
+                  label="Download Vector SVG"
+                  desc="Infinite scale vector mark"
+                  onClick={exportSvg}
+                />
+                <ExportItem
+                  icon={<Download className="w-4 h-4 text-blue-400" />}
+                  label="Download PNG (2× High-Res)"
+                  desc="Crisp 2000px master"
+                  onClick={() => exportPng(2, false)}
+                />
+                <ExportItem
+                  icon={<Sparkles className="w-4 h-4 text-purple-400" />}
+                  label="Download PNG (4× Ultra)"
+                  desc="4000px ultra high-res"
+                  onClick={() => exportPng(4, false)}
+                />
+                <ExportItem
+                  icon={<Download className="w-4 h-4 text-amber-400" />}
+                  label="Transparent PNG (2×)"
+                  desc="No background"
+                  onClick={() => exportPng(2, true)}
+                />
+                <ExportItem
+                  icon={<Download className="w-4 h-4 text-neutral-300" />}
+                  label="Download JPG (2×)"
+                  desc="Solid background"
+                  onClick={exportJpg}
+                />
+                <div className="border-t border-neutral-800 my-1" />
+                <ExportItem
+                  icon={<Copy className="w-4 h-4 text-cyan-400" />}
+                  label="Copy PNG to Clipboard"
+                  desc="Instant paste"
+                  onClick={copyPngToClipboard}
+                />
+                <ExportItem
+                  icon={<FileJson className="w-4 h-4 text-neutral-400" />}
+                  label="Save Design (.json)"
+                  desc="Full editable project data"
+                  onClick={exportJson}
+                />
               </div>
             )}
           </div>
 
-          {/* Close */}
+          {/* Close Editor */}
           {onClose && (
-            <button onClick={onClose} className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer">
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+              title="Close editor"
+            >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+      {/* ── Main Workspace ── */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* Left: Layers + Palette Panel */}
         <div className="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-neutral-800 bg-neutral-900/40 flex flex-col overflow-hidden max-h-48 md:max-h-full">
           {/* Panel tabs */}
@@ -648,7 +979,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              Layers
+              Layers ({layers.length})
             </button>
             <button
               onClick={() => setActivePanel("palette")}
@@ -657,7 +988,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
               }`}
             >
               <Palette className="w-3.5 h-3.5" />
-              Palette
+              Palette & Canvas
             </button>
           </div>
 
@@ -665,13 +996,13 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
           <div className="flex-1 overflow-y-auto">
             {activePanel === "layers" ? (
               <div className="p-3 space-y-1">
-                {/* Background */}
+                {/* Background item */}
                 <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-neutral-900/50 border border-neutral-800/50 mb-2">
                   <div
                     className="w-5 h-5 rounded border border-neutral-700 shrink-0"
                     style={{ backgroundColor }}
                   />
-                  <span className="text-[11px] text-neutral-400 flex-1 truncate">Background</span>
+                  <span className="text-[11px] text-neutral-400 flex-1 truncate">Canvas Background</span>
                   <input
                     type="color"
                     value={backgroundColor}
@@ -681,18 +1012,17 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                   />
                 </div>
 
-                {/* Layer list (reversed for visual stacking order) */}
+                {/* Layer list */}
                 {[...layers].reverse().map((layer) => (
                   <div
                     key={layer.id}
                     onClick={() => setSelectedLayerId(layer.id)}
                     className={`group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all ${
                       selectedLayerId === layer.id
-                        ? "bg-blue-500/10 border border-blue-500/30"
-                        : "hover:bg-neutral-800/50 border border-transparent"
+                        ? "bg-blue-500/15 border border-blue-500/30 text-white"
+                        : "hover:bg-neutral-800/50 border border-transparent text-neutral-300"
                     }`}
                   >
-                    {/* Type icon */}
                     <div className="w-5 h-5 rounded bg-neutral-800 flex items-center justify-center shrink-0">
                       {layer.type === "text" ? (
                         <Type className="w-3 h-3 text-neutral-400" />
@@ -701,29 +1031,29 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                       )}
                     </div>
 
-                    {/* Label */}
-                    <span className="text-[11px] text-neutral-300 flex-1 truncate">{layer.label}</span>
+                    <span className="text-[11px] flex-1 truncate">{layer.label}</span>
 
-                    {/* Visibility + Lock */}
                     <button
                       onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
                       className="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-500 hover:text-white transition-all cursor-pointer"
+                      title={layer.visible ? "Hide layer" : "Show layer"}
                     >
                       {layer.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { locked: !layer.locked }); }}
                       className="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-500 hover:text-white transition-all cursor-pointer"
+                      title={layer.locked ? "Unlock layer" : "Lock layer"}
                     >
-                      {layer.locked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                      {layer.locked ? <Lock className="w-3 h-3 text-amber-400" /> : <LockOpen className="w-3 h-3" />}
                     </button>
                   </div>
                 ))}
               </div>
             ) : (
-              /* Palette panel */
+              /* Palette & Canvas panel */
               <div className="p-3 space-y-3">
-                <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider">Brand Colors</p>
+                <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider">Brand Palette</p>
                 <div className="space-y-1.5">
                   {palette.map((color, idx) => (
                     <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-neutral-800/50 group">
@@ -762,7 +1092,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </div>
 
                 <div className="pt-2 border-t border-neutral-800">
-                  <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider mb-2">Canvas Size</p>
+                  <p className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider mb-2">Canvas Preset Size</p>
                   <div className="space-y-1">
                     {CANVAS_SIZES.map((size) => (
                       <button
@@ -770,7 +1100,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                         onClick={() => { setCanvasWidth(size.w); setCanvasHeight(size.h); }}
                         className={`w-full text-left px-2 py-1.5 rounded-lg text-[11px] transition-colors cursor-pointer ${
                           canvasWidth === size.w && canvasHeight === size.h
-                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/30"
+                            ? "bg-blue-500/10 text-blue-400 border border-blue-500/30 font-medium"
                             : "text-neutral-400 hover:bg-neutral-800/50 border border-transparent"
                         }`}
                       >
@@ -784,62 +1114,71 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
           </div>
         </div>
 
-        {/* Center: SVG Canvas */}
+        {/* Center: SVG Canvas Viewport */}
         <div
           ref={containerRef}
-          className="flex-1 flex items-center justify-center overflow-auto bg-neutral-950"
+          className="flex-1 flex items-center justify-center overflow-auto bg-neutral-950 p-6 relative"
           style={{
-            backgroundImage: "radial-gradient(circle, #1a1a1a 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, #1e1e1e 1px, transparent 1px)",
             backgroundSize: "24px 24px",
           }}
         >
-          <svg
-            ref={svgRef}
-            width={canvasWidth}
-            height={canvasHeight}
-            viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+          <div
             style={{
-              transform: `scale(${zoom})`,
-              transformOrigin: "center center",
-              boxShadow: "0 0 0 1px rgba(255,255,255,0.06), 0 25px 50px -12px rgba(0,0,0,0.5)",
-              borderRadius: 8,
+              width: canvasWidth * zoom,
+              height: canvasHeight * zoom,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "width 0.15s ease, height 0.15s ease",
             }}
-            onPointerDown={handleCanvasPointerDown}
-            onPointerMove={handleCanvasPointerMove}
-            onPointerUp={handleCanvasPointerUp}
           >
-            {/* Background */}
-            <rect width={canvasWidth} height={canvasHeight} fill={backgroundColor} rx={0} />
+            <svg
+              ref={svgRef}
+              width={canvasWidth}
+              height={canvasHeight}
+              viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: "center center",
+                boxShadow: "0 0 0 1px rgba(255,255,255,0.08), 0 25px 50px -12px rgba(0,0,0,0.7)",
+                borderRadius: 8,
+              }}
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
+            >
+              {/* Background */}
+              <rect data-bg-rect="true" width={canvasWidth} height={canvasHeight} fill={backgroundColor} rx={0} />
 
-            {/* Grid overlay */}
-            {showGrid && (
-              <g data-grid-ui="true" opacity={0.15}>
-                {/* Center lines */}
-                <line x1={canvasWidth / 2} y1={0} x2={canvasWidth / 2} y2={canvasHeight} stroke="#3B82F6" strokeWidth={1} strokeDasharray="4 4" />
-                <line x1={0} y1={canvasHeight / 2} x2={canvasWidth} y2={canvasHeight / 2} stroke="#3B82F6" strokeWidth={1} strokeDasharray="4 4" />
-                {/* Grid */}
-                {Array.from({ length: Math.floor(canvasWidth / 50) }, (_, i) => (
-                  <line key={`gv${i}`} x1={(i + 1) * 50} y1={0} x2={(i + 1) * 50} y2={canvasHeight} stroke="#666" strokeWidth={0.5} />
-                ))}
-                {Array.from({ length: Math.floor(canvasHeight / 50) }, (_, i) => (
-                  <line key={`gh${i}`} x1={0} y1={(i + 1) * 50} x2={canvasWidth} y2={(i + 1) * 50} stroke="#666" strokeWidth={0.5} />
-                ))}
-              </g>
-            )}
+              {/* Grid overlay */}
+              {showGrid && (
+                <g data-grid-ui="true" opacity={0.2}>
+                  <line x1={canvasWidth / 2} y1={0} x2={canvasWidth / 2} y2={canvasHeight} stroke="#3B82F6" strokeWidth={1} strokeDasharray="4 4" />
+                  <line x1={0} y1={canvasHeight / 2} x2={canvasWidth} y2={canvasHeight / 2} stroke="#3B82F6" strokeWidth={1} strokeDasharray="4 4" />
+                  {Array.from({ length: Math.floor(canvasWidth / 50) }, (_, i) => (
+                    <line key={`gv${i}`} x1={(i + 1) * 50} y1={0} x2={(i + 1) * 50} y2={canvasHeight} stroke="#666" strokeWidth={0.5} />
+                  ))}
+                  {Array.from({ length: Math.floor(canvasHeight / 50) }, (_, i) => (
+                    <line key={`gh${i}`} x1={0} y1={(i + 1) * 50} x2={canvasWidth} y2={(i + 1) * 50} stroke="#666" strokeWidth={0.5} />
+                  ))}
+                </g>
+              )}
 
-            {/* Layers */}
-            {layers.map(renderSvgLayer)}
-          </svg>
+              {/* Layers */}
+              {layers.map(renderSvgLayer)}
+            </svg>
+          </div>
         </div>
 
-        {/* Right: Properties Panel */}
+        {/* Right: Properties & Scale Inspector Panel */}
         <div className="w-72 shrink-0 border-l border-neutral-800 bg-[#0d0d0d] overflow-y-auto">
           {selectedLayer ? (
             <div className="p-4 space-y-4">
               {/* Header */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-neutral-800 flex items-center justify-center">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-neutral-800 flex items-center justify-center shrink-0">
                     {selectedLayer.type === "text" ? (
                       <Type className="w-3.5 h-3.5 text-blue-400" />
                     ) : (
@@ -849,10 +1188,10 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                   <input
                     value={selectedLayer.label}
                     onChange={(e) => updateLayer(selectedLayer.id, { label: e.target.value })}
-                    className="text-sm font-medium text-white bg-transparent border-none outline-none w-full"
+                    className="text-sm font-medium text-white bg-transparent border-none outline-none w-full truncate"
                   />
                 </div>
-                <div className="flex gap-0.5">
+                <div className="flex gap-0.5 shrink-0">
                   <button onClick={() => duplicateLayer(selectedLayer.id)} className="p-1 rounded text-neutral-500 hover:text-white hover:bg-neutral-800 cursor-pointer" title="Duplicate">
                     <Copy className="w-3.5 h-3.5" />
                   </button>
@@ -899,7 +1238,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                           value={selectedLayer.fontSize || 48}
                           min={8}
                           max={200}
-                          label="Size"
+                          label="px"
                           onChange={(v) => updateLayer(selectedLayer.id, { fontSize: v })}
                         />
                       </div>
@@ -931,17 +1270,79 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </>
               )}
 
-              {/* ── Size (icon/shape) ── */}
-              {(selectedLayer.type === "icon" || selectedLayer.type === "shape") && (
-                <PropSection label="Size">
-                  <div className="grid grid-cols-2 gap-2">
-                    <NumberInput label="W" value={selectedLayer.width} onChange={(v) => updateLayer(selectedLayer.id, { width: v })} />
-                    <NumberInput label="H" value={selectedLayer.height} onChange={(v) => updateLayer(selectedLayer.id, { height: v })} />
+              {/* ── Scale & Sizing Controls (Works for shapes, icons & text) ── */}
+              <PropSection label="Scale & Dimensions">
+                <div className="p-3 rounded-xl bg-neutral-900/60 border border-neutral-800/80 space-y-2.5">
+                  {/* Quick Scale Multipliers */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-neutral-400 font-medium">Uniform Scale</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => scaleLayer(selectedLayer.id, 0.9)}
+                        className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[10px] text-neutral-300 font-mono cursor-pointer transition-colors"
+                        title="Scale down 10%"
+                      >
+                        -10%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scaleLayer(selectedLayer.id, 1.1)}
+                        className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[10px] text-neutral-300 font-mono cursor-pointer transition-colors"
+                        title="Scale up 10%"
+                      >
+                        +10%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => scaleLayer(selectedLayer.id, 1.25)}
+                        className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-[10px] text-neutral-300 font-mono cursor-pointer transition-colors"
+                        title="Scale up 25%"
+                      >
+                        +25%
+                      </button>
+                    </div>
                   </div>
-                </PropSection>
-              )}
 
-              {/* ── Common properties ── */}
+                  {/* Width & Height inputs */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-neutral-500 w-3">W</span>
+                      <input
+                        type="number"
+                        value={Math.round(selectedLayer.width)}
+                        onChange={(e) => setLayerWidth(selectedLayer.id, Number(e.target.value))}
+                        className="flex-1 px-2 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-xs text-white outline-none focus:border-blue-500/50 w-0"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono text-neutral-500 w-3">H</span>
+                      <input
+                        type="number"
+                        value={Math.round(selectedLayer.height)}
+                        onChange={(e) => setLayerHeight(selectedLayer.id, Number(e.target.value))}
+                        className="flex-1 px-2 py-1 rounded-lg bg-neutral-950 border border-neutral-800 text-xs text-white outline-none focus:border-blue-500/50 w-0"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Aspect Ratio Lock Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setLockAspect(!lockAspect)}
+                    className={`w-full flex items-center justify-center gap-1.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+                      lockAspect
+                        ? "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                        : "bg-neutral-950 text-neutral-500 hover:text-neutral-300 border border-neutral-800"
+                    }`}
+                  >
+                    <Lock className="w-3 h-3" />
+                    {lockAspect ? "Proportional Aspect (Locked)" : "Freeform Aspect (Unlocked)"}
+                  </button>
+                </div>
+              </PropSection>
+
+              {/* ── Position ── */}
               <PropSection label="Position">
                 <div className="grid grid-cols-2 gap-2">
                   <NumberInput label="X" value={selectedLayer.x} onChange={(v) => updateLayer(selectedLayer.id, { x: v })} />
@@ -949,6 +1350,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </div>
               </PropSection>
 
+              {/* ── Color ── */}
               <PropSection label="Fill Color">
                 <div className="flex items-center gap-2">
                   <input
@@ -963,7 +1365,6 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                     className="flex-1 px-2 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs font-mono text-white outline-none"
                   />
                 </div>
-                {/* Quick palette swatches */}
                 <div className="flex gap-1 mt-2">
                   {palette.map((c) => (
                     <button
@@ -977,6 +1378,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </div>
               </PropSection>
 
+              {/* ── Opacity & Rotation ── */}
               <PropSection label="Opacity & Rotation">
                 <div className="space-y-2">
                   <SliderInput
@@ -996,7 +1398,8 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </div>
               </PropSection>
 
-              <PropSection label="Layer Order">
+              {/* ── Layer Order ── */}
+              <PropSection label="Layer Stacking">
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => moveLayerOrder(selectedLayer.id, "up")}
@@ -1013,7 +1416,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
                 </div>
               </PropSection>
 
-              {/* Center button */}
+              {/* ── Center on Canvas ── */}
               <button
                 onClick={() =>
                   updateLayer(selectedLayer.id, {
@@ -1027,28 +1430,28 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
               </button>
             </div>
           ) : (
-            /* No selection */
-            <div className="flex flex-col items-center justify-center h-full text-center px-6">
+            /* No selection state */
+            <div className="flex flex-col items-center justify-center h-full text-center px-6 py-12">
               <div className="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-3">
                 <Move className="w-5 h-5 text-neutral-500" />
               </div>
-              <p className="text-sm font-medium text-neutral-300">Select a layer</p>
+              <p className="text-sm font-medium text-neutral-300">Select an element</p>
               <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                Click any element on the canvas or in the layers panel to edit its properties.
+                Click any layer on the canvas to drag, scale corner handles, or customize colors and typography.
               </p>
-              <div className="mt-4 w-full space-y-1.5">
-                <p className="text-[10px] font-mono text-neutral-600 uppercase tracking-wider">Shortcuts</p>
-                <div className="flex justify-between text-[10px] text-neutral-500">
+              <div className="mt-6 w-full space-y-2 pt-4 border-t border-neutral-900">
+                <p className="text-[10px] font-mono text-neutral-600 uppercase tracking-wider text-left">Quick Tips</p>
+                <div className="flex justify-between text-[11px] text-neutral-400">
+                  <span>Proportional Scale</span>
+                  <span className="font-mono text-neutral-500">Corner handles</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-neutral-400">
                   <span>Undo / Redo</span>
-                  <span className="font-mono">Ctrl+Z / Y</span>
+                  <span className="font-mono text-neutral-500">Ctrl+Z / Y</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-neutral-500">
+                <div className="flex justify-between text-[11px] text-neutral-400">
                   <span>Delete layer</span>
-                  <span className="font-mono">Delete</span>
-                </div>
-                <div className="flex justify-between text-[10px] text-neutral-500">
-                  <span>Deselect</span>
-                  <span className="font-mono">Esc</span>
+                  <span className="font-mono text-neutral-500">Del</span>
                 </div>
               </div>
             </div>
@@ -1108,12 +1511,12 @@ function ExportItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-neutral-800 transition-colors cursor-pointer"
+      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-neutral-800 transition-colors cursor-pointer"
     >
-      <span className="text-neutral-400">{icon}</span>
-      <div>
-        <p className="text-xs font-medium text-white">{label}</p>
-        <p className="text-[10px] text-neutral-500">{desc}</p>
+      <span className="shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-white truncate">{label}</p>
+        <p className="text-[10px] text-neutral-500 truncate">{desc}</p>
       </div>
     </button>
   );

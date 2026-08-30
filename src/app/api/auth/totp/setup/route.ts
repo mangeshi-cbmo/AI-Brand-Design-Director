@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateTOTPSecret } from "@/lib/auth/totp";
+import { getOrCreateTOTPSecret, TotpStorageError } from "@/lib/auth/totp";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,6 +25,17 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("Error setting up TOTP:", error);
+
+    if (error instanceof TotpStorageError) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "The authenticator service is temporarily unavailable. Please try again.",
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { success: false, error: "Failed to setup Google Authenticator" },
       { status: 500 }
