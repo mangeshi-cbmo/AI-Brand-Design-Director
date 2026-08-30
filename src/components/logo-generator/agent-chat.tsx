@@ -18,6 +18,8 @@ import { ChatMessage, QuickOption } from "@/types/chat";
 import { ColorPalette, GeneratedLogo, LogoStyle } from "@/types/logo";
 import { BrandGuidelines } from "@/types/brand";
 import { BrandGuidelinesModal } from "@/components/brand-kit/brand-guidelines";
+import { renderLogoDataToSvg } from "@/lib/ai/svg-renderer";
+import { PALETTE_SWATCHES } from "@/config/palettes";
 
 /* Shape of messages returned by /api/ai/agent-chat */
 interface ServerMessage {
@@ -41,18 +43,99 @@ interface AgentChatProps {
   sessionId: string;
   onLogoGenerated: (logo: GeneratedLogo) => void;
   onGuidelinesGenerated?: (guidelines: BrandGuidelines) => void;
+  onGeneratingChange?: (isGenerating: boolean) => void;
   onSessionUpdated?: () => void;
   onOpenEditor?: () => void;
 }
 
-const THINKING_STEPS = [
-  "Analyzing brand requirements",
-  "Balancing typography & geometry",
-  "Synthesizing 4 emblem concepts",
-  "Compiling brand guidelines",
-];
+/**
+ * Dynamically determine thinking steps based on what the user said
+ * and the current brand context. This avoids the static "logo generation"
+ * reasoning appearing when someone just says "hi".
+ */
+function getThinkingSteps(
+  userMessage: string,
+  ctx: {
+    brandName?: string;
+    industry?: string;
+    style?: string;
+    colorPalette?: string;
+  }
+): string[] {
+  const msg = userMessage.toLowerCase().trim();
 
-import { PALETTE_SWATCHES } from "@/config/palettes";
+  /* ── Brand guidelines request ── */
+  if (/guideline|brand kit|style guide|identity system|brand book/i.test(msg)) {
+    return [
+      "Analyzing brand identity",
+      "Structuring typography rules",
+      "Mapping color system & usage",
+      "Compiling brand guidelines",
+    ];
+  }
+
+  /* ── Logo generation / creation triggers ── */
+  const isGenerating =
+    /generat|create|make|design|craft|build|synthe|produce|render/i.test(msg) &&
+    (ctx.brandName || /\blogo\b/i.test(msg));
+  const hasFullContext = !!(ctx.brandName && ctx.industry && ctx.style);
+
+  if (isGenerating || (hasFullContext && /go|let'?s|ready|proceed|sure|yes|ok|start/i.test(msg))) {
+    return [
+      "Analyzing brand requirements",
+      "Balancing typography & geometry",
+      "Synthesizing 4 emblem concepts",
+    ];
+  }
+
+  /* ── Refinement / iteration triggers ── */
+  if (/refin|improv|change|modif|tweak|adjust|updat|redo|redo|edit|fix|alter|polish/i.test(msg)) {
+    return [
+      "Reviewing current design",
+      "Applying your feedback",
+      "Re-rendering variants",
+    ];
+  }
+
+  /* ── Style / color selection ── */
+  if (
+    /style|color|palette|theme|vibe|aesthetic|look|feel|minimalist|gradient|cyber|vintage|3d|isometric|monogram|mascot/i.test(msg)
+  ) {
+    return [
+      "Evaluating visual direction",
+      "Matching style preferences",
+    ];
+  }
+
+  /* ── Industry / context gathering ── */
+  if (/industry|market|sector|niche|target|audience|who|what.*do|about/i.test(msg)) {
+    return [
+      "Understanding your market",
+      "Mapping brand positioning",
+    ];
+  }
+
+  /* ── Brand name step ── */
+  if (!ctx.brandName) {
+    return [
+      "Understanding your vision",
+      "Preparing next steps",
+    ];
+  }
+
+  /* ── Generic greeting / short message ── */
+  if (msg.length < 20 || /^(hi|hey|hello|sup|yo|thanks|thank|ok|cool|nice|great|good)/i.test(msg)) {
+    return [
+      "Processing your message",
+    ];
+  }
+
+  /* ── Fallback for longer conversational messages ── */
+  return [
+    "Analyzing your request",
+    "Preparing response",
+  ];
+}
 
 function PaletteDots({ palette, size = 3 }: { palette?: string; size?: number }) {
   const colors = palette ? PALETTE_SWATCHES[palette] : undefined;
@@ -62,7 +145,7 @@ function PaletteDots({ palette, size = 3 }: { palette?: string; size?: number })
       {colors.map((c, i) => (
         <span
           key={i}
-          className="rounded-full ring-1 ring-black/60"
+          className="rounded-full ring-1 ring-black/20 dark:ring-black/60"
           style={{ backgroundColor: c, width: size * 4, height: size * 4 }}
         />
       ))}
@@ -96,7 +179,7 @@ function RichText({ content }: { content: string }) {
         if (isBullet) {
           return (
             <div key={i} className="flex items-start gap-2.5 pl-1">
-              <span className="mt-[7px] w-1 h-1 rounded-full bg-neutral-500 shrink-0" />
+              <span className="mt-[7px] w-1 h-1 rounded-full bg-neutral-400 dark:bg-neutral-500 shrink-0" />
               <span>{rendered}</span>
             </div>
           );
@@ -111,11 +194,11 @@ function RichText({ content }: { content: string }) {
 function ArchitectAvatar({ pulsing = false }: { pulsing?: boolean }) {
   return (
     <div className="relative w-7 h-7 shrink-0">
-      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-neutral-800 to-black border border-neutral-700 flex items-center justify-center shadow-md">
-        <Compass className="w-3.5 h-3.5 text-neutral-200" />
+      <div className="w-7 h-7 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-center shadow-md">
+        <Compass className="w-3.5 h-3.5 text-neutral-300" />
       </div>
       <span
-        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-black ${
+        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-neutral-950 ${
           pulsing ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
         }`}
       />
@@ -130,6 +213,7 @@ export function AgentChat({
   sessionId,
   onLogoGenerated,
   onGuidelinesGenerated,
+  onGeneratingChange,
   onSessionUpdated,
   onOpenEditor,
 }: AgentChatProps) {
@@ -140,10 +224,10 @@ export function AgentChat({
       content: "Hi! Let's craft your logo mark.\n\nWhat is the name of your brand or company?",
       timestamp: new Date(),
       quickOptions: [
-        { label: "Acme AI", value: "Acme AI" },
         { label: "Apex Labs", value: "Apex Labs" },
         { label: "Lumina Studio", value: "Lumina Studio" },
         { label: "Verve Dynamics", value: "Verve Dynamics" },
+        { label: "Nova Labs", value: "Nova Labs" },
       ],
     },
   ]);
@@ -151,9 +235,11 @@ export function AgentChat({
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [thinkingStepIdx, setThinkingStepIdx] = useState(0);
+  const [activeThinkingSteps, setActiveThinkingSteps] = useState<string[]>(["Processing your message"]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   /* Which concept is selected per generation message (msgId -> logoId) */
   const [selectedConcepts, setSelectedConcepts] = useState<Record<string, string>>({});
+  const [latestLogo, setLatestLogo] = useState<GeneratedLogo | null>(null);
   const [guidelinesView, setGuidelinesView] = useState<{
     guidelines: BrandGuidelines;
     logo: GeneratedLogo | null;
@@ -173,9 +259,12 @@ export function AgentChat({
   const idSeqRef = useRef(0);
   const onLogoGeneratedRef = useRef(onLogoGenerated);
   const onGuidelinesGeneratedRef = useRef(onGuidelinesGenerated);
+  const onGeneratingChangeRef = useRef(onGeneratingChange);
+
   useEffect(() => {
     onLogoGeneratedRef.current = onLogoGenerated;
     onGuidelinesGeneratedRef.current = onGuidelinesGenerated;
+    onGeneratingChangeRef.current = onGeneratingChange;
   });
 
   const scrollToBottom = () => {
@@ -194,10 +283,10 @@ export function AgentChat({
   useEffect(() => {
     if (!isThinking) return;
     const interval = setInterval(() => {
-      setThinkingStepIdx((prev) => Math.min(prev + 1, THINKING_STEPS.length - 1));
+      setThinkingStepIdx((prev) => Math.min(prev + 1, activeThinkingSteps.length - 1));
     }, 2200);
     return () => clearInterval(interval);
-  }, [isThinking]);
+  }, [isThinking, activeThinkingSteps]);
 
   // Load conversation history when sessionId changes
   useEffect(() => {
@@ -209,12 +298,13 @@ export function AgentChat({
         if (data.success && data.data && data.data.messages?.length > 0) {
           const serverMessages = data.data.messages as ServerMessage[];
 
-          // Hydrate concept variations from the logos collection (only ids
-          // are stored in the conversation to keep its document small)
+          // Hydrate concept variations and primary logos from the logos collection
           const variantIds = new Set<string>();
-          serverMessages.forEach((m) =>
-            m.logoData?.variantLogoIds?.forEach((id) => variantIds.add(id))
-          );
+          serverMessages.forEach((m) => {
+            if (m.logoData?.logoId) variantIds.add(m.logoData.logoId);
+            m.logoData?.variantLogoIds?.forEach((id) => variantIds.add(id));
+          });
+
           const logoById = new Map<string, GeneratedLogo>();
           if (variantIds.size > 0) {
             try {
@@ -235,6 +325,9 @@ export function AgentChat({
             const variants = m.logoData?.variantLogoIds
               ?.map((id) => logoById.get(id))
               .filter((l): l is GeneratedLogo => Boolean(l));
+
+            const primaryLogoDoc = m.logoData?.logoId ? logoById.get(m.logoData.logoId) : undefined;
+
             return {
               id: m.id,
               role: m.role,
@@ -246,13 +339,14 @@ export function AgentChat({
               generatedLogo: m.logoData
                 ? {
                     id: m.logoData.logoId || `logo-${m.id}`,
-                    imageUrl: m.logoData.imageUrl,
-                    brandName: m.logoData.brandName || "Brand Logo",
-                    style: (m.logoData.style as LogoStyle) || "minimalist",
+                    imageUrl: primaryLogoDoc?.imageUrl || m.logoData.imageUrl,
+                    brandName: primaryLogoDoc?.brandName || m.logoData.brandName || "Brand Logo",
+                    style: (primaryLogoDoc?.style || m.logoData.style || "minimalist") as LogoStyle,
                     colorPalette:
-                      (data.data.brandContext?.colorPalette as ColorPalette) || "monochrome",
-                    promptUsed: m.logoData.promptUsed || "",
-                    createdAt: new Date(m.createdAt),
+                      (primaryLogoDoc?.colorPalette || data.data.brandContext?.colorPalette || "monochrome") as ColorPalette,
+                    promptUsed: primaryLogoDoc?.promptUsed || m.logoData.promptUsed || "",
+                    logoData: primaryLogoDoc?.logoData,
+                    createdAt: primaryLogoDoc?.createdAt ? new Date(primaryLogoDoc.createdAt) : new Date(m.createdAt),
                   }
                 : undefined,
             };
@@ -263,6 +357,7 @@ export function AgentChat({
 
           const lastLogo = loadedMessages.slice().reverse().find((m) => m.generatedLogo);
           if (lastLogo?.generatedLogo) {
+            setLatestLogo(lastLogo.generatedLogo);
             onLogoGeneratedRef.current(lastLogo.generatedLogo);
           }
 
@@ -298,7 +393,16 @@ export function AgentChat({
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setThinkingStepIdx(0);
+    setActiveThinkingSteps(getThinkingSteps(messageText, context));
     setIsThinking(true);
+
+    const willLikelyGenerate =
+      /generat|create|make|design|craft|build|synthe|produce|render/i.test(messageText) ||
+      (!!context.brandName && !!context.industry);
+
+    if (willLikelyGenerate) {
+      onGeneratingChangeRef.current?.(true);
+    }
 
     try {
       const response = await fetch("/api/ai/agent-chat", {
@@ -328,6 +432,7 @@ export function AgentChat({
       setContext(newContext || {});
 
       if (generatedLogo) {
+        setLatestLogo(generatedLogo);
         onLogoGenerated(generatedLogo);
       }
       if (brandGuidelines) {
@@ -363,6 +468,7 @@ export function AgentChat({
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsThinking(false);
+      onGeneratingChangeRef.current?.(false);
     }
   };
 
@@ -397,6 +503,7 @@ export function AgentChat({
 
   const handleSelectConcept = (msg: ChatMessage, concept: GeneratedLogo) => {
     setSelectedConcepts((prev) => ({ ...prev, [msg.id]: concept.id }));
+    setLatestLogo(concept);
     onLogoGenerated(concept);
   };
 
@@ -408,6 +515,10 @@ export function AgentChat({
     { label: "Palette", value: context.colorPalette },
   ];
   const specDone = specSteps.filter((s) => s.value).length;
+  const pendingSpec = specSteps.find((s) => !s.value)?.label;
+  const inputPlaceholder = pendingSpec
+    ? `Type your own ${pendingSpec.toLowerCase()}...`
+    : "Describe your brand direction...";
 
   const lastAssistantId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
@@ -416,26 +527,26 @@ export function AgentChat({
       {guidelinesView && (
         <BrandGuidelinesModal
           guidelines={guidelinesView.guidelines}
-          logo={guidelinesView.logo}
+          logo={guidelinesView.logo || latestLogo || null}
           onClose={() => setGuidelinesView(null)}
         />
       )}
-      <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden font-sans">
+      <div className="flex flex-col h-[700px] w-full rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden font-sans">
       {/* Agent Activity Header */}
-      <div className="border-b border-neutral-900 bg-[#0d0d0d]">
+      <div className="border-b border-neutral-900 bg-neutral-900/50">
         <div className="flex items-center justify-between px-5 py-3">
           <div className="flex items-center gap-3">
             <ArchitectAvatar pulsing={isThinking} />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-neutral-100 tracking-wide font-mono">
+                <span className="text-xs font-semibold text-white tracking-wide font-mono">
                   agent:brand-architect
                 </span>
                 <span
                   className={`text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-md border ${
                     isThinking
-                      ? "text-amber-300 border-amber-400/20 bg-amber-400/5"
-                      : "text-emerald-300 border-emerald-400/20 bg-emerald-400/5"
+                      ? "text-amber-500 dark:text-amber-300 border-amber-500/20 bg-amber-500/10"
+                      : "text-emerald-500 dark:text-emerald-300 border-emerald-500/20 bg-emerald-500/10"
                   }`}
                 >
                   {isThinking ? "working" : "online"}
@@ -462,7 +573,7 @@ export function AgentChat({
                   key={s.label}
                   title={`${s.label}${s.value ? `: ${s.value}` : " — pending"}`}
                   className={`h-1 w-6 rounded-full transition-colors ${
-                    s.value ? "bg-white" : "bg-neutral-800"
+                    s.value ? "bg-neutral-900 dark:bg-white" : "bg-neutral-200 dark:bg-neutral-800"
                   }`}
                 />
               ))}
@@ -471,7 +582,7 @@ export function AgentChat({
           </div>
         </div>
         {/* Gradient hairline */}
-        <div className="h-px bg-gradient-to-r from-transparent via-neutral-700/60 to-transparent" />
+        <div className="h-px bg-gradient-to-r from-transparent via-neutral-300 dark:via-neutral-700/60 to-transparent" />
       </div>
 
       {/* Messages Viewport */}
@@ -488,10 +599,10 @@ export function AgentChat({
               {msg.role === "user" ? (
                 /* USER MESSAGE */
                 <div className="flex flex-col items-end gap-1">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 bg-gradient-to-b from-[#242424] to-[#1b1b1b] border border-neutral-800 text-neutral-100 text-sm shadow-md">
+                  <div className="max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 bg-neutral-900 border border-neutral-800 text-neutral-200 text-sm shadow-md">
                     {msg.content}
                   </div>
-                  <span className="text-[9px] font-mono text-neutral-700 pr-1">
+                  <span className="text-[9px] font-mono text-neutral-500 pr-1">
                     {formatTime(msg.timestamp)}
                   </span>
                 </div>
@@ -502,13 +613,13 @@ export function AgentChat({
                   <div className="flex-1 min-w-0 space-y-3">
                     <div className="flex items-center gap-2">
                       <span className="text-[11px] font-semibold text-neutral-300">Architect</span>
-                      <span className="text-[9px] font-mono text-neutral-700">
+                      <span className="text-[9px] font-mono text-neutral-500">
                         {formatTime(msg.timestamp)}
                       </span>
                       <button
                         onClick={() => handleCopyMessage(msg)}
                         title="Copy message"
-                        className="opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100 p-0.5 text-neutral-600 hover:text-neutral-300 transition-all cursor-pointer"
+                        className="opacity-0 hover:opacity-100 focus:opacity-100 group-hover:opacity-100 p-0.5 text-neutral-500 hover:text-neutral-300 transition-all cursor-pointer"
                       >
                         {copiedId === msg.id ? (
                           <Check className="w-3 h-3 text-emerald-400" />
@@ -520,20 +631,20 @@ export function AgentChat({
 
                     {/* Brand spec card — shown on the latest agent reply once params exist */}
                     {msg.id === lastAssistantId && context.brandName && (
-                      <div className="rounded-xl border border-neutral-800/80 bg-[#101010] overflow-hidden text-xs font-mono">
-                        <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800/80 bg-[#151515]">
+                      <div className="rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden text-xs font-mono">
+                        <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800 bg-neutral-900/80">
                           <div className="flex items-center gap-2 text-[11px]">
                             <span className="flex gap-1">
-                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
-                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
-                              <span className="w-2 h-2 rounded-full bg-neutral-700" />
+                              <span className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-700" />
+                              <span className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-700" />
+                              <span className="w-2 h-2 rounded-full bg-neutral-400 dark:bg-neutral-700" />
                             </span>
                             <span className="text-neutral-300 font-medium ml-1">
                               brand.spec
                             </span>
                           </div>
-                          <span className="text-[10px] text-emerald-400 flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span className="text-[10px] text-emerald-500 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
                             {specDone}/4 resolved
                           </span>
                         </div>
@@ -545,13 +656,13 @@ export function AgentChat({
                                 className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${
                                   s.value
                                     ? "border-neutral-600 bg-neutral-800"
-                                    : "border-neutral-800 bg-transparent"
+                                    : "border-neutral-700 bg-transparent"
                                 }`}
                               >
                                 {s.value ? (
                                   <Check className="w-2.5 h-2.5 text-emerald-400" />
                                 ) : (
-                                  <span className="text-[8px] text-neutral-600">{i + 1}</span>
+                                  <span className="text-[8px] text-neutral-500">{i + 1}</span>
                                 )}
                               </span>
                               <span className="text-neutral-500 shrink-0">{s.label.toLowerCase()}:</span>
@@ -563,7 +674,7 @@ export function AgentChat({
                               ) : (
                                 <span
                                   className={`truncate ${
-                                    s.value ? "text-white font-medium" : "text-neutral-700 italic"
+                                    s.value ? "text-white font-medium" : "text-neutral-500 italic"
                                   }`}
                                 >
                                   {s.value || "pending"}
@@ -597,21 +708,18 @@ export function AgentChat({
                                       key={concept.id}
                                       onClick={() => handleSelectConcept(msg, concept)}
                                       title={`Select concept ${ci + 1}`}
-                                      className={`group relative aspect-square rounded-xl overflow-hidden border transition-all cursor-pointer bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px] ${
+                                      className={`group relative aspect-square rounded-xl overflow-hidden border transition-all cursor-pointer bg-neutral-950 ${
                                         isSelected
-                                          ? "border-white ring-1 ring-white/60"
+                                          ? "border-neutral-900 dark:border-white ring-1 ring-neutral-900/30 dark:ring-white/60"
                                           : "border-neutral-800 hover:border-neutral-600"
                                       }`}
                                     >
                                       {concept.logoData ? (
                                         <div
                                           className="absolute inset-0 p-2 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
-                                          dangerouslySetInnerHTML={{ __html: (() => {
-                                            try {
-                                              const { renderLogoDataToSvg } = require("@/lib/ai/svg-renderer");
-                                              return renderLogoDataToSvg(concept.logoData);
-                                            } catch { return ""; }
-                                          })() }}
+                                          dangerouslySetInnerHTML={{
+                                            __html: renderLogoDataToSvg(concept.logoData),
+                                          }}
                                         />
                                       ) : (
                                         <Image
@@ -625,15 +733,15 @@ export function AgentChat({
                                       <span
                                         className={`absolute top-1.5 left-1.5 text-[9px] font-mono px-1.5 py-0.5 rounded-md ${
                                           isSelected
-                                            ? "bg-white text-black font-semibold"
-                                            : "bg-black/70 text-neutral-400"
+                                            ? "bg-neutral-900 text-white dark:bg-white dark:text-black font-semibold shadow-sm"
+                                            : "bg-neutral-800/80 text-neutral-400"
                                         }`}
                                       >
                                         0{ci + 1}
                                       </span>
                                       {isSelected && (
-                                        <span className="absolute bottom-1.5 right-1.5 w-4 h-4 rounded-full bg-white flex items-center justify-center">
-                                          <Check className="w-2.5 h-2.5 text-black" />
+                                        <span className="absolute bottom-1.5 right-1.5 w-4 h-4 rounded-full bg-neutral-900 text-white dark:bg-white dark:text-black flex items-center justify-center shadow-sm">
+                                          <Check className="w-2.5 h-2.5 stroke-[2.5]" />
                                         </span>
                                       )}
                                     </button>
@@ -643,18 +751,15 @@ export function AgentChat({
                             )}
 
                             {/* Selected concept summary card */}
-                            <div className="rounded-xl border border-neutral-800 bg-gradient-to-b from-[#131313] to-[#0d0d0d] p-3.5">
+                            <div className="rounded-xl border border-neutral-800 bg-neutral-900/40 p-3.5">
                               <div className="flex items-center gap-4">
-                                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-700 shrink-0 bg-neutral-950 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:10px_10px]">
+                                <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-neutral-800 shrink-0 bg-neutral-950">
                                   {selected.logoData ? (
                                     <div
                                       className="absolute inset-0 p-1 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
-                                      dangerouslySetInnerHTML={{ __html: (() => {
-                                        try {
-                                          const { renderLogoDataToSvg } = require("@/lib/ai/svg-renderer");
-                                          return renderLogoDataToSvg(selected.logoData);
-                                        } catch { return ""; }
-                                      })() }}
+                                      dangerouslySetInnerHTML={{
+                                        __html: renderLogoDataToSvg(selected.logoData),
+                                      }}
                                     />
                                   ) : (
                                     <Image
@@ -668,7 +773,7 @@ export function AgentChat({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5">
-                                    <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                                     <p className="font-semibold text-sm text-white truncate">
                                       {selected.brandName}
                                     </p>
@@ -688,7 +793,7 @@ export function AgentChat({
                                           onLogoGenerated(selected);
                                           onOpenEditor();
                                         }}
-                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-neutral-200 transition-colors cursor-pointer"
+                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm"
                                       >
                                         <Edit3 className="w-3 h-3" />
                                         Open in Editor
@@ -699,10 +804,10 @@ export function AgentChat({
                                         onClick={() =>
                                           setGuidelinesView({
                                             guidelines: msg.brandGuidelines!,
-                                            logo: selected,
+                                            logo: selected || latestLogo || null,
                                           })
                                         }
-                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-200 text-[11px] font-medium hover:bg-neutral-800 hover:text-white transition-colors cursor-pointer"
+                                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-300 text-[11px] font-medium hover:bg-neutral-900 hover:text-white transition-colors cursor-pointer"
                                       >
                                         <BookOpen className="w-3 h-3" />
                                         Brand Guidelines
@@ -723,24 +828,99 @@ export function AgentChat({
                         );
                       })()}
 
+                    {/* Standalone Brand Guidelines Showcase Card (when requested separately) */}
+                    {msg.brandGuidelines && !msg.generatedLogo && (
+                      <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3.5 backdrop-blur-sm">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                              <BookOpen className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                {msg.brandGuidelines.brandName}
+                                <span className="text-[10px] font-mono font-normal px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 border border-neutral-700">
+                                  Identity Manual
+                                </span>
+                              </h4>
+                              <p className="text-[11px] text-neutral-400 font-mono capitalize">
+                                {(msg.brandGuidelines.style || "Minimalist").replace(/-/g, " ")} · {(msg.brandGuidelines.colorPalette || "Monochrome").replace(/-/g, " ")}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              const lastLogo =
+                                latestLogo ||
+                                [...messages].reverse().find((m) => m.generatedLogo)?.generatedLogo ||
+                                null;
+                              setGuidelinesView({
+                                guidelines: msg.brandGuidelines!,
+                                logo: lastLogo,
+                              });
+                            }}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-semibold transition-all cursor-pointer shadow-sm shrink-0 w-fit"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            <span>View Full Brand Guidelines</span>
+                          </button>
+                        </div>
+
+                        {/* Story / Mission preview */}
+                        {msg.brandGuidelines.story && (
+                          <p className="text-xs text-neutral-300 leading-relaxed italic line-clamp-2">
+                            &ldquo;{msg.brandGuidelines.story}&rdquo;
+                          </p>
+                        )}
+
+                        {/* Personality & Colors Pill row */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] font-mono">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-neutral-500 text-[10px] uppercase tracking-wider">Attributes:</span>
+                            {msg.brandGuidelines.personality?.slice(0, 4).map((trait, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 rounded-md bg-neutral-950 border border-neutral-800 text-neutral-300 text-[10px]"
+                              >
+                                {trait}
+                              </span>
+                            ))}
+                          </div>
+
+                          {msg.brandGuidelines.colorPalette && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-neutral-500 text-[10px] uppercase tracking-wider">Palette:</span>
+                              <PaletteDots palette={msg.brandGuidelines.colorPalette} size={3} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Quick option chips */}
                     {msg.quickOptions && msg.quickOptions.length > 0 && (
-                      <div className="pt-1 flex flex-wrap gap-1.5">
-                        {msg.quickOptions.map((opt: QuickOption, idx: number) => (
-                          <motion.button
-                            key={idx}
-                            initial={{ opacity: 0, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.08 * idx, duration: 0.2 }}
-                            onClick={() => sendMessage(opt.value)}
-                            disabled={isThinking}
-                            title={opt.description}
-                            className="group text-xs px-3 py-1.5 rounded-xl border border-neutral-800 bg-[#141414] hover:bg-white hover:text-black hover:border-white text-neutral-300 transition-all duration-150 flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
-                          >
-                            <span>{opt.label}</span>
-                            <ArrowRight className="w-3 h-3 text-neutral-500 group-hover:text-black group-hover:translate-x-0.5 transition-all" />
-                          </motion.button>
-                        ))}
+                      <div className="pt-1 space-y-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.quickOptions.map((opt: QuickOption, idx: number) => (
+                            <motion.button
+                              key={idx}
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.08 * idx, duration: 0.2 }}
+                              onClick={() => sendMessage(opt.value)}
+                              disabled={isThinking}
+                              title={opt.description}
+                              className="group text-xs px-3 py-1.5 rounded-xl border border-neutral-800 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white transition-all duration-150 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow-sm"
+                            >
+                              <span>{opt.label}</span>
+                              <ArrowRight className="w-3 h-3 text-neutral-500 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+                            </motion.button>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-neutral-500 font-mono">
+                          Or type your own answer below.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -759,19 +939,20 @@ export function AgentChat({
           >
             <ArchitectAvatar pulsing />
             <div className="flex-1 space-y-2.5">
-              <div className="inline-flex items-center gap-3 bg-[#111111] border border-neutral-800 rounded-xl px-4 py-2.5">
+              <div className="inline-flex items-center gap-3 bg-neutral-900 border border-neutral-800 rounded-xl px-4 py-2.5 shadow-sm">
                 <span className="flex items-center gap-1">
-                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
-                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
-                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-300" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-400" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-neutral-400" />
                 </span>
                 <span className="text-shimmer text-xs font-mono font-medium">
-                  {THINKING_STEPS[thinkingStepIdx]}...
+                  {activeThinkingSteps[thinkingStepIdx]}...
                 </span>
               </div>
 
+              {activeThinkingSteps.length > 1 && (
               <div className="pl-1 space-y-1.5 text-[11px] font-mono">
-                {THINKING_STEPS.map((step, i) => (
+                {activeThinkingSteps.map((step, i) => (
                   <div
                     key={step}
                     className={`flex items-center gap-2 transition-colors ${
@@ -779,24 +960,25 @@ export function AgentChat({
                         ? "text-neutral-400"
                         : i === thinkingStepIdx
                           ? "text-neutral-200"
-                          : "text-neutral-700"
+                          : "text-neutral-500"
                     }`}
                   >
                     {i < thinkingStepIdx ? (
                       <Check className="w-3 h-3 text-emerald-400 shrink-0" />
                     ) : i === thinkingStepIdx ? (
                       <span className="w-3 h-3 flex items-center justify-center shrink-0">
-                        <span className="w-2.5 h-2.5 rounded-full border-2 border-neutral-600 border-t-white animate-spin" />
+                        <span className="w-2.5 h-2.5 rounded-full border-2 border-neutral-400 border-t-transparent animate-spin" />
                       </span>
                     ) : (
                       <span className="w-3 h-3 flex items-center justify-center shrink-0">
-                        <span className="w-1 h-1 rounded-full bg-neutral-700" />
+                        <span className="w-1 h-1 rounded-full bg-neutral-400 dark:bg-neutral-700" />
                       </span>
                     )}
                     <span>{step}</span>
                   </div>
                 ))}
               </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -805,31 +987,31 @@ export function AgentChat({
       </div>
 
       {/* Prompt Composer */}
-      <div className="p-3.5 bg-[#0a0a0a] border-t border-neutral-900">
+      <div className="p-3.5 bg-neutral-950 border-t border-neutral-900">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             sendMessage();
           }}
-          className="rounded-2xl border border-neutral-800 bg-[#111111] p-3 transition-all duration-200 focus-within:border-neutral-600 focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.04)]"
+          className="rounded-2xl border border-neutral-800 bg-neutral-900/50 p-3 transition-all duration-200 focus-within:border-neutral-600 focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.04)] dark:focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.04)]"
         >
           <input
             ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe your brand direction..."
+            placeholder={inputPlaceholder}
             disabled={isThinking}
-            className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-600 focus:outline-none"
+            className="w-full bg-transparent text-sm text-white placeholder-neutral-500 focus:outline-none"
           />
 
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-neutral-800/60">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#1a1a1a] border border-neutral-800 text-[11px] font-mono text-neutral-300">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-[11px] font-mono text-neutral-300 shadow-xs">
                 <Compass className="w-3 h-3 text-neutral-400" />
                 <span>Brand Architect</span>
               </div>
-              <span className="hidden sm:inline text-[10px] font-mono text-neutral-700">
+              <span className="hidden sm:inline text-[10px] font-mono text-neutral-500">
                 Enter ↵ to send
               </span>
             </div>
@@ -839,7 +1021,7 @@ export function AgentChat({
               disabled={!input.trim() || isThinking}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                 input.trim() && !isThinking
-                  ? "bg-white text-black hover:bg-neutral-200 hover:scale-105 shadow-md"
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-black hover:opacity-90 hover:scale-105 shadow-md"
                   : "bg-neutral-800 text-neutral-500 cursor-not-allowed"
               }`}
             >

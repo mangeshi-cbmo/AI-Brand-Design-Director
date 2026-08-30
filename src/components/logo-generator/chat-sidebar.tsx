@@ -85,7 +85,7 @@ export function ChatSidebar({
   }
 
   return (
-    <aside className="w-full sm:w-72 flex flex-col h-[700px] rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden shrink-0 transition-all">
+    <aside className="w-full lg:w-72 flex flex-col h-[360px] lg:h-[700px] rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden shrink-0 transition-all">
       {/* Sidebar Header */}
       <div className="p-3.5 border-b border-neutral-900 flex items-center justify-between bg-black/60 backdrop-blur-sm">
         <div className="flex items-center gap-2">

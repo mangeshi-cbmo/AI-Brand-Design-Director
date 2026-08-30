@@ -24,11 +24,18 @@ export default function GenerateStudioPage() {
   const [currentGuidelines, setCurrentGuidelines] = useState<BrandGuidelines | null>(null);
   const [activeView, setActiveView] = useState<"studio" | "editor" | "guidelines">("studio");
 
-  // Sidebar & session state
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  // Sidebar & session state (auto-collapse on mobile/tablet)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string>(() => `session_${Date.now()}`);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isGeneratingLogo, setIsGeneratingLogo] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setIsSidebarOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -172,10 +179,10 @@ export default function GenerateStudioPage() {
         </div>
 
         {/* View Switcher Controls */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-950 border border-neutral-900 self-start sm:self-auto">
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-neutral-950 border border-neutral-900 overflow-x-auto max-w-full self-stretch sm:self-auto shrink-0">
           <button
             onClick={() => setActiveView("studio")}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               activeView === "studio"
                 ? "bg-white text-black font-semibold shadow-sm"
                 : "text-neutral-400 hover:text-white"
@@ -240,6 +247,7 @@ export default function GenerateStudioPage() {
               sessionId={activeSessionId}
               onLogoGenerated={(logo) => setCurrentLogo(logo)}
               onGuidelinesGenerated={(guidelines) => setCurrentGuidelines(guidelines)}
+              onGeneratingChange={(isGen) => setIsGeneratingLogo(isGen)}
               onSessionUpdated={fetchConversations}
               onOpenEditor={() => setActiveView("editor")}
             />
@@ -249,7 +257,7 @@ export default function GenerateStudioPage() {
           <div className="w-full lg:w-[380px] xl:w-[420px] shrink-0 lg:sticky lg:top-20">
             <LogoCanvas
               logo={currentLogo}
-              isGenerating={false}
+              isGenerating={isGeneratingLogo}
               onOpenEditor={() => setActiveView("editor")}
             />
           </div>
@@ -273,8 +281,8 @@ export default function GenerateStudioPage() {
         /* Brand Guidelines View */
         <div className="w-full flex-1">
           {currentGuidelines ? (
-            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-[#0a0a0a] shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-900 bg-[#0d0d0d]">
+            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-neutral-950 shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-neutral-900 bg-neutral-900/50">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-white truncate">
                     {currentGuidelines.brandName} — Brand Guidelines
@@ -288,7 +296,7 @@ export default function GenerateStudioPage() {
               <BrandGuidelinesDocument guidelines={currentGuidelines} logo={currentLogo} />
             </div>
           ) : (
-            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-[#0a0a0a] py-24 px-6 text-center">
+            <div className="max-w-4xl mx-auto rounded-2xl border border-neutral-900 bg-neutral-950 py-24 px-6 text-center">
               <div className="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mx-auto mb-4">
                 <BookOpen className="w-5 h-5 text-neutral-400" />
               </div>

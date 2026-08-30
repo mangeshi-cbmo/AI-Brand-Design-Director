@@ -1,14 +1,13 @@
-import { connectDB } from "@/lib/db/client";
 import { LogoModel } from "@/lib/db/models/logo.model";
+import { uploadLogoAsset } from "@/lib/storage/gcs";
 import { ColorPalette, GeneratedLogo, LogoData, LogoGenerationParams, LogoStyle } from "@/types/logo";
 
 export class LogoService {
   /**
-   * Fetch logos from MongoDB Atlas 'logo' database with optional id/email filtering and limit
+   * Fetch logos from MongoDB Atlas 'logos' collection with optional id/email filtering and limit
    */
   static async getAllLogos(userEmail?: string, ids?: string[], limit: number = 60): Promise<GeneratedLogo[]> {
     try {
-      await connectDB();
       const filter: Record<string, unknown> = {};
       if (ids && ids.length > 0) {
         filter._id = { $in: ids };
@@ -21,12 +20,14 @@ export class LogoService {
         .limit(limit)
         .lean();
 
-      // Older documents can lack these fields — default them so the UI never
-      // receives undefined where GeneratedLogo promises a string.
       return docs.map((doc) => ({
         id: String(doc._id),
         brandName: doc.brandName || "Brand Logo",
-        imageUrl: doc.imageUrl,
+        slogan: doc.slogan,
+        imageUrl: doc.gcsUrl || doc.imageUrl,
+        gcsUrl: doc.gcsUrl,
+        gcsPath: doc.gcsPath,
+        gcsBucket: doc.gcsBucket,
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",
@@ -40,7 +41,9 @@ export class LogoService {
   }
 
   /**
-   * Save a newly generated logo to MongoDB Atlas 'logo' database
+   * Save a newly generated logo:
+   * 1. Uploads the image / preview asset to Google Cloud Storage (gs://ai-brand-assets-director)
+   * 2. Saves complete brand metadata and permanent GCS URL to MongoDB Atlas 'logos' collection
    */
   static async saveLogo(
     params: LogoGenerationParams,
@@ -49,11 +52,43 @@ export class LogoService {
     userEmail?: string,
     logoData?: LogoData
   ): Promise<GeneratedLogo> {
+    let finalImageUrl = imageUrl;
+    let gcsUrl: string | undefined;
+    let gcsPath: string | undefined;
+    let gcsBucket: string | undefined;
+    let mimeType: string | undefined;
+    let fileSize: number | undefined;
+
+    // Upload to Google Cloud Storage if imageUrl contains image data or if we have an asset
     try {
-      await connectDB();
+      if (imageUrl && (imageUrl.startsWith("data:") || imageUrl.startsWith("<svg"))) {
+        const uploadResult = await uploadLogoAsset({
+          data: imageUrl,
+          brandName: params.brandName,
+          userEmail,
+        });
+
+        gcsUrl = uploadResult.gcsUrl;
+        gcsPath = uploadResult.gcsPath;
+        gcsBucket = uploadResult.bucket;
+        mimeType = uploadResult.mimeType;
+        fileSize = uploadResult.fileSize;
+        finalImageUrl = uploadResult.gcsUrl; // Use permanent GCS URL as primary image URL
+      }
+    } catch (gcsError) {
+      console.error("Warning: Failed to upload logo asset to Google Cloud Storage, proceeding with inline URI:", gcsError);
+    }
+
+    try {
       const newDoc = await LogoModel.create({
         brandName: params.brandName,
-        imageUrl,
+        slogan: params.slogan,
+        imageUrl: finalImageUrl,
+        gcsUrl,
+        gcsPath,
+        gcsBucket,
+        mimeType,
+        fileSize,
         style: params.style,
         colorPalette: params.colorPalette,
         promptUsed,
@@ -66,7 +101,11 @@ export class LogoService {
       return {
         id: String(newDoc._id),
         brandName: newDoc.brandName,
+        slogan: newDoc.slogan,
         imageUrl: newDoc.imageUrl,
+        gcsUrl: newDoc.gcsUrl,
+        gcsPath: newDoc.gcsPath,
+        gcsBucket: newDoc.gcsBucket,
         style: newDoc.style as LogoStyle,
         colorPalette: newDoc.colorPalette as ColorPalette,
         promptUsed: newDoc.promptUsed,
@@ -79,7 +118,11 @@ export class LogoService {
       return {
         id: `logo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         brandName: params.brandName,
-        imageUrl,
+        slogan: params.slogan,
+        imageUrl: finalImageUrl,
+        gcsUrl,
+        gcsPath,
+        gcsBucket,
         style: params.style,
         colorPalette: params.colorPalette,
         promptUsed,
@@ -90,12 +133,10 @@ export class LogoService {
   }
 
   /**
-   * Delete a logo by ID, scoped to its owner so users can only
-   * remove their own marks.
+   * Delete a logo by ID, scoped to its owner
    */
   static async deleteLogo(id: string, userEmail?: string): Promise<boolean> {
     try {
-      await connectDB();
       const filter: Record<string, unknown> = { _id: id };
       if (userEmail) filter.userEmail = userEmail;
       const res = await LogoModel.deleteOne(filter);
@@ -107,17 +148,36 @@ export class LogoService {
   }
 
   /**
+   * Batch delete multiple logos by IDs, scoped to their owner
+   */
+  static async deleteLogos(ids: string[], userEmail?: string): Promise<number> {
+    try {
+      if (!ids || ids.length === 0) return 0;
+      const filter: Record<string, unknown> = { _id: { $in: ids } };
+      if (userEmail) filter.userEmail = userEmail;
+      const res = await LogoModel.deleteMany(filter);
+      return res.deletedCount;
+    } catch (error) {
+      console.error("Error batch deleting logos from MongoDB Atlas:", error);
+      return 0;
+    }
+  }
+
+  /**
    * Get logo by ID
    */
   static async getLogoById(id: string): Promise<GeneratedLogo | null> {
     try {
-      await connectDB();
       const doc = await LogoModel.findById(id).lean();
       if (!doc) return null;
       return {
         id: String(doc._id),
         brandName: doc.brandName || "Brand Logo",
-        imageUrl: doc.imageUrl,
+        slogan: doc.slogan,
+        imageUrl: doc.gcsUrl || doc.imageUrl,
+        gcsUrl: doc.gcsUrl,
+        gcsPath: doc.gcsPath,
+        gcsBucket: doc.gcsBucket,
         style: (doc.style as LogoStyle) || "minimalist",
         colorPalette: (doc.colorPalette as ColorPalette) || "monochrome",
         promptUsed: doc.promptUsed || "",

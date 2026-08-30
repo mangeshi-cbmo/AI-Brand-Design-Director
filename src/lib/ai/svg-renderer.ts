@@ -29,7 +29,16 @@ export function renderLogoDataToSvg(data: LogoData, options: RenderSvgOptions = 
   let activeLayers = data.layers.filter((l) => l.visible);
 
   if (iconOnly) {
-    const iconLayers = activeLayers.filter((l) => l.type === "icon" || l.type === "shape");
+    // Full-canvas shapes are background panels, not part of the icon. Including
+    // one here makes the extracted mark render as a solid square (often white)
+    // with the actual symbol reduced to a tiny detail inside it.
+    const canvasW = data.canvasWidth || 500;
+    const canvasH = data.canvasHeight || 500;
+    const iconLayers = activeLayers.filter((l) => {
+      if (l.type !== "icon" && l.type !== "shape") return false;
+      const fillsCanvas = l.width >= canvasW * 0.85 && l.height >= canvasH * 0.85;
+      return !fillsCanvas;
+    });
     if (iconLayers.length > 0) {
       activeLayers = iconLayers;
     }

@@ -664,7 +664,7 @@ export default function LandingPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45, delay: 0.5 + i * 0.1, ease: "easeOut" }}
               whileHover={{ y: -3 }}
-              className="p-3 rounded-xl bg-[#0a0a0a] border border-neutral-900 hover:border-neutral-700 text-center space-y-1 transition-colors cursor-default"
+              className="p-3 rounded-xl bg-neutral-950 border border-neutral-900 hover:border-neutral-700 text-center space-y-1 transition-colors cursor-default"
             >
               <Icon className="w-4 h-4 text-neutral-400 mx-auto" />
               <p className="text-xs font-semibold text-white font-mono">{title}</p>

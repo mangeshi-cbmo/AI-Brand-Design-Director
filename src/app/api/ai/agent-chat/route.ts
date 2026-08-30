@@ -3,6 +3,7 @@ import { AgentOrchestrator, AgentContext } from "@/lib/ai/agent-orchestrator";
 import { ConversationService } from "@/services/conversation.service";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth-options";
+import { tokenContext, newRequestId } from "@/services/token-usage.service";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +30,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Run the Gemini-powered agent orchestration reasoning loop
-    const result = await AgentOrchestrator.processMessage(
-      userMessage,
-      context,
-      userId
-    );
+    const result = await tokenContext.run({ requestId: newRequestId(), userId, projectId: sessionId }, () => AgentOrchestrator.processMessage(userMessage, context, userId));
 
     // 2. Persist entire conversation turn properly into MongoDB Atlas 'agent_brand_db'
     try {

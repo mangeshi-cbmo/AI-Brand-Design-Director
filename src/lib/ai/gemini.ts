@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { recordTokenUsage } from "@/services/token-usage.service";
 
 /*
  * Google GenAI SDK client layer.
@@ -10,7 +11,6 @@ import { GoogleGenAI } from "@google/genai";
  */
 
 export const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
-export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "imagen-4.0-generate-001";
 
 const clientCache = new Map<string, GoogleGenAI>();
 
@@ -66,49 +66,14 @@ export async function generateJson<T>(options: {
     contents: [{ role: "user", parts: [{ text: options.user }] }],
     config,
   });
+  const usage = response.usageMetadata;
+  void recordTokenUsage({
+    model: GEMINI_TEXT_MODEL,
+    operation: "generate_json",
+    inputTokens: usage?.promptTokenCount || 0,
+    outputTokens: usage?.candidatesTokenCount || 0,
+    totalTokens: usage?.totalTokenCount || 0,
+  });
   return JSON.parse(stripCodeFences(response.text || "{}")) as T;
 }
 
-/**
- * Generate `count` logo images, returned as PNG data URLs.
- * Uses the Imagen generateImages API (native multi-image support) when the
- * configured model is an Imagen model, otherwise falls back to parallel
- * Gemini image-generation calls (one image per call).
- */
-export async function generateLogoImages(prompt: string, count: number): Promise<string[]> {
-  const location = process.env.GEMINI_IMAGE_LOCATION || process.env.GOOGLE_CLOUD_LOCATION;
-  const ai = getGeminiClient(location);
-
-  if (GEMINI_IMAGE_MODEL.includes("imagen")) {
-    const response = await ai.models.generateImages({
-      model: GEMINI_IMAGE_MODEL,
-      prompt,
-      config: {
-        numberOfImages: count,
-        aspectRatio: "1:1",
-        outputMimeType: "image/png",
-      },
-    });
-    return (response.generatedImages || [])
-      .map((img) =>
-        img.image?.imageBytes ? `data:image/png;base64,${img.image.imageBytes}` : ""
-      )
-      .filter(Boolean);
-  }
-
-  const calls = Array.from({ length: count }, async () => {
-    const response = await ai.models.generateContent({
-      model: GEMINI_IMAGE_MODEL,
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      config: {
-        responseModalities: ["TEXT", "IMAGE"],
-        imageConfig: { aspectRatio: "1:1" },
-      },
-    });
-    const part = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
-    return part?.inlineData?.data
-      ? `data:${part.inlineData.mimeType || "image/png"};base64,${part.inlineData.data}`
-      : "";
-  });
-  return (await Promise.all(calls)).filter(Boolean);
-}

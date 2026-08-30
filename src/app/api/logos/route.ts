@@ -41,27 +41,47 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const id = req.nextUrl.searchParams.get("id");
-    if (!id) {
+    let idsToDelete: string[] = [];
+    const idParam = req.nextUrl.searchParams.get("id");
+    const idsParam = req.nextUrl.searchParams.get("ids");
+    
+    if (idsParam) {
+      idsToDelete = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
+    } else if (idParam) {
+      idsToDelete = [idParam.trim()];
+    } else {
+      try {
+        const body = await req.json();
+        if (Array.isArray(body?.ids)) {
+          idsToDelete = body.ids.map(String).filter(Boolean);
+        } else if (body?.id) {
+          idsToDelete = [String(body.id)];
+        }
+      } catch {
+        // body not json or empty
+      }
+    }
+
+    if (idsToDelete.length === 0) {
       return NextResponse.json(
-        { success: false, error: "Missing logo id" } satisfies ApiResponse,
+        { success: false, error: "Missing logo id(s) to delete" } satisfies ApiResponse,
         { status: 400 }
       );
     }
 
-    const deleted = await LogoService.deleteLogo(id, userEmail);
-    if (!deleted) {
+    const count = await LogoService.deleteLogos(idsToDelete, userEmail);
+    if (count === 0) {
       return NextResponse.json(
-        { success: false, error: "Logo not found or not owned by you" } satisfies ApiResponse,
+        { success: false, error: "No matching logos found or unauthorized" } satisfies ApiResponse,
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ success: true } satisfies ApiResponse);
+    return NextResponse.json({ success: true, data: { count } });
   } catch (error) {
     console.error("Error in DELETE /api/logos:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to delete logo" } satisfies ApiResponse,
+      { success: false, error: "Failed to delete logo(s)" } satisfies ApiResponse,
       { status: 500 }
     );
   }

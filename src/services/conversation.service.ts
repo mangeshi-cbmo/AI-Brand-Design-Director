@@ -1,4 +1,3 @@
-import { connectDB } from "@/lib/db/client";
 import {
   ConversationModel,
   IConversation,
@@ -16,8 +15,6 @@ export class ConversationService {
     sessionId: string,
     initialMessage?: string
   ): Promise<IConversation> {
-    await connectDB();
-
     let conv = await ConversationModel.findOne({ sessionId });
 
     if (!conv) {
@@ -63,8 +60,6 @@ export class ConversationService {
     },
     brandGuidelines?: BrandGuidelines
   ): Promise<IConversation | null> {
-    await connectDB();
-
     const userMessage: IMessage = {
       id: `msg-u-${Date.now()}`,
       role: "user",
@@ -108,7 +103,6 @@ export class ConversationService {
     userId: string,
     title: string
   ) {
-    await connectDB();
     return ConversationModel.findOneAndUpdate(
       { sessionId, userId },
       { $set: { title } },
@@ -120,7 +114,6 @@ export class ConversationService {
    * Get all conversations for a user
    */
   static async getUserConversations(userId: string) {
-    await connectDB();
     return ConversationModel.find({ userId })
       .sort({ updatedAt: -1 })
       .lean();
@@ -130,7 +123,6 @@ export class ConversationService {
    * Get a conversation by sessionId
    */
   static async getConversationBySessionId(sessionId: string) {
-    await connectDB();
     return ConversationModel.findOne({ sessionId }).lean();
   }
 
@@ -138,7 +130,6 @@ export class ConversationService {
    * Delete a conversation by sessionId and userId
    */
   static async deleteConversation(sessionId: string, userId: string) {
-    await connectDB();
     return ConversationModel.findOneAndDelete({ sessionId, userId });
   }
 }

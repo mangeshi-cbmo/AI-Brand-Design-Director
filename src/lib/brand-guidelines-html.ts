@@ -38,17 +38,38 @@ export function buildGuidelinesHtml(
   const markSized = (px: number, onLight = false) => {
     if (logo?.logoData) {
       try {
-        const svg = renderLogoIconSvg(logo.logoData, { onLight, onDark: !onLight });
+        const rawData = typeof logo.logoData === "string" ? JSON.parse(logo.logoData) : logo.logoData;
+        const svg = renderLogoIconSvg(rawData, { onLight, onDark: !onLight });
         const styledSvg = svg.replace("<svg ", `<svg style="width:100%;height:100%;object-fit:contain;" `);
         return `<div style="width:${px}px;height:${px}px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${styledSvg}</div>`;
       } catch (err) {
         console.error("Error embedding SVG in guidelines HTML:", err);
       }
     }
-    if (logo?.imageUrl) {
+    if (logo?.imageUrl?.startsWith("data:image/svg+xml;base64,")) {
+      try {
+        const base64Part = logo.imageUrl.replace("data:image/svg+xml;base64,", "");
+        const decoded = typeof atob === "function" ? atob(base64Part) : Buffer.from(base64Part, "base64").toString("utf-8");
+        if (decoded.includes("<svg")) {
+          const styled = decoded.replace("<svg ", `<svg style="width:100%;height:100%;object-fit:contain;" `);
+          return `<div style="width:${px}px;height:${px}px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${styled}</div>`;
+        }
+      } catch (err) {
+        console.error("Error decoding base64 SVG for HTML:", err);
+      }
+    }
+    if (logo?.imageUrl?.trim().startsWith("<svg")) {
+      const styled = logo.imageUrl.replace("<svg ", `<svg style="width:100%;height:100%;object-fit:contain;" `);
+      return `<div style="width:${px}px;height:${px}px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${styled}</div>`;
+    }
+    if (logo?.imageUrl && !logo.imageUrl.startsWith("data:image/svg+xml")) {
       return `<img src="${logo.imageUrl}" alt="${brand} mark" style="width:${px}px;height:${px}px;object-fit:contain;flex-shrink:0;" />`;
     }
-    return "";
+    const initials = esc(g.brandName.slice(0, 2).toUpperCase());
+    const bg = onLight ? "#111827" : "#1e1e1e";
+    const fg = "#ffffff";
+    const fs = Math.max(12, Math.round(px * 0.4));
+    return `<div style="width:${px}px;height:${px}px;border-radius:${Math.round(px * 0.2)}px;background:${bg};color:${fg};display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-family:monospace;font-size:${fs}px;flex-shrink:0;border:1px solid #333;">${initials}</div>`;
   };
 
   const mark = markSized(110);
