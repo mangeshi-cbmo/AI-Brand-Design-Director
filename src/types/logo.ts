@@ -98,7 +98,11 @@ export interface LogoGenerationParams {
 export interface GeneratedLogo {
   id: string;
   brandName: string;
+  slogan?: string;
   imageUrl: string;
+  gcsUrl?: string;
+  gcsPath?: string;
+  gcsBucket?: string;
   svgData?: string;
   /** Structured editable logo data (new SVG system) */
   logoData?: LogoData;
@@ -108,3 +112,4 @@ export interface GeneratedLogo {
   createdAt: Date;
   isFavorite?: boolean;
 }
+

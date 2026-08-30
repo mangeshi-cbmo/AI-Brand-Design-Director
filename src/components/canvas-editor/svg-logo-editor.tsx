@@ -572,19 +572,19 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
   /* Render                                                             */
   /* ---------------------------------------------------------------- */
   return (
-    <div className="w-full h-[calc(100vh-180px)] min-h-[600px] flex flex-col rounded-2xl border border-neutral-800 bg-[#0a0a0a] overflow-hidden">
+    <div className="w-full h-[calc(100vh-180px)] min-h-[600px] flex flex-col rounded-2xl border border-neutral-800 bg-neutral-950 overflow-hidden">
       {/* ── Top Toolbar ── */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-neutral-800 bg-[#0d0d0d]">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 border-b border-neutral-800 bg-neutral-900/50 overflow-x-auto max-w-full gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Undo / Redo */}
           <ToolBtn icon={<Undo2 className="w-4 h-4" />} label="Undo" onClick={undo} disabled={historyIdx <= 0} />
           <ToolBtn icon={<Redo2 className="w-4 h-4" />} label="Redo" onClick={redo} disabled={historyIdx >= history.length - 1} />
-          <div className="w-px h-5 bg-neutral-800 mx-1" />
+          <div className="w-px h-5 bg-neutral-800 mx-0.5 sm:mx-1" />
 
           {/* Add layers */}
           <ToolBtn icon={<Type className="w-4 h-4" />} label="Add Text" onClick={addTextLayer} />
           <ToolBtn icon={<div className="w-4 h-4 rounded-full border-2 border-current" />} label="Add Shape" onClick={addShapeLayer} />
-          <div className="w-px h-5 bg-neutral-800 mx-1" />
+          <div className="w-px h-5 bg-neutral-800 mx-0.5 sm:mx-1" />
 
           {/* View controls */}
           <ToolBtn icon={<Grid3X3 className="w-4 h-4" />} label="Grid" onClick={() => setShowGrid(!showGrid)} active={showGrid} />
@@ -595,7 +595,7 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
           }} />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Zoom */}
           <div className="flex items-center gap-1 bg-neutral-900 rounded-lg px-2 py-1 border border-neutral-800">
             <button onClick={() => setZoom((z) => Math.max(0.1, z - 0.1))} className="p-0.5 text-neutral-400 hover:text-white cursor-pointer">
@@ -636,9 +636,9 @@ export function SvgLogoEditor({ logoData, onClose }: SvgLogoEditorProps) {
       </div>
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Left: Layers + Palette Panel */}
-        <div className="w-64 shrink-0 border-r border-neutral-800 bg-[#0d0d0d] flex flex-col overflow-hidden">
+        <div className="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-neutral-800 bg-neutral-900/40 flex flex-col overflow-hidden max-h-48 md:max-h-full">
           {/* Panel tabs */}
           <div className="flex border-b border-neutral-800">
             <button

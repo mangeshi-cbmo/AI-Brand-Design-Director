@@ -5,8 +5,14 @@ import { LogoService } from "@/services/logo.service";
 import { ApiResponse } from "@/types/api";
 import { GeneratedLogo, LogoStyle, ColorPalette } from "@/types/logo";
 
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth/auth-options";
+import { tokenContext, newRequestId } from "@/services/token-usage.service";
+
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userEmail = session?.user?.email || undefined;
     const body = await req.json();
 
     const {
@@ -36,8 +42,9 @@ export async function POST(req: NextRequest) {
       conceptDescription,
     };
 
+    const projectId = body.projectId || `logo_${Date.now()}`;
     // 1. Generate structured logo concepts via Gemini text model
-    const concepts = await generateStructuredLogos(params);
+    const concepts = await tokenContext.run({ requestId: newRequestId(), userId: userEmail || "guest_user", projectId }, () => generateStructuredLogos(params));
 
     // 2. Render each concept to SVG data URLs for preview
     const results: GeneratedLogo[] = [];
@@ -51,7 +58,7 @@ export async function POST(req: NextRequest) {
         params,
         imageUrl,
         promptUsed,
-        undefined,
+        userEmail,
         logoData
       );
 

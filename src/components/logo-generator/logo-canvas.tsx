@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { Download, Copy, Check, Eye, Edit3, Compass, FileCode } from "lucide-react";
+import { Download, Copy, Check, Eye, Edit3, Compass, FileCode, Sun, Moon, Grid } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,8 @@ interface LogoCanvasProps {
 
 export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps) {
   const [copied, setCopied] = useState(false);
-  const [bgMode] = useState<"dark" | "light" | "grid">("dark");
+  const [bgMode, setBgMode] = useState<"dark" | "light" | "grid">("dark");
+  const [imgError, setImgError] = useState(false);
 
   const handleCopyPrompt = () => {
     if (!logo?.promptUsed) return;
@@ -27,15 +28,56 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadPng = () => {
-    if (!logo?.imageUrl) return;
-    const a = document.createElement("a");
-    a.href = logo.imageUrl;
-    a.download = `${(logo.brandName || "brand").toLowerCase().replace(/\s+/g, "-")}-logo.png`;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownloadPng = async () => {
+    if (!logo) return;
+    const filename = `${(logo.brandName || "brand").toLowerCase().replace(/\s+/g, "-")}-logo`;
+
+    if (logo.logoData) {
+      try {
+        const svgStr = renderLogoDataToSvg(logo.logoData);
+        const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+        const URL = window.URL || window.webkitURL || window;
+        const blobURL = URL.createObjectURL(svgBlob);
+        const image = new window.Image();
+        image.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 1024;
+          canvas.height = 1024;
+          const context = canvas.getContext("2d");
+          if (context) {
+            context.drawImage(image, 0, 0, 1024, 1024);
+            const pngUrl = canvas.toDataURL("image/png");
+            const a = document.createElement("a");
+            a.download = `${filename}.png`;
+            a.href = pngUrl;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+          URL.revokeObjectURL(blobURL);
+        };
+        image.src = blobURL;
+        return;
+      } catch (err) {
+        console.error("Error creating PNG from SVG logo in canvas:", err);
+      }
+    }
+
+    if (logo.imageUrl) {
+      try {
+        const blob = await (await fetch(logo.imageUrl)).blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filename}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch {
+        window.open(logo.imageUrl, "_blank", "noopener");
+      }
+    }
   };
 
   const handleDownloadSvg = () => {
@@ -55,29 +97,60 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
   /** Render the SVG preview inline when logoData is available */
   const renderPreview = () => {
     if (logo?.logoData) {
-      const svgStr = renderLogoDataToSvg(logo.logoData);
+      try {
+        const svgStr = renderLogoDataToSvg(logo.logoData);
+        if (svgStr) {
+          return (
+            <div
+              className="relative w-full h-full flex items-center justify-center p-2 [&>svg]:w-full [&>svg]:h-full [&>svg]:max-h-full [&>svg]:max-w-full [&>svg]:object-contain select-none"
+              dangerouslySetInnerHTML={{ __html: svgStr }}
+            />
+          );
+        }
+      } catch (e) {
+        console.error("Error rendering SVG in LogoCanvas:", e);
+      }
+    }
+
+    if (logo?.imageUrl && !imgError) {
+      if (logo.imageUrl.trim().startsWith("<svg")) {
+        return (
+          <div
+            className="relative w-full h-full flex items-center justify-center p-2 [&>svg]:w-full [&>svg]:h-full [&>svg]:max-h-full [&>svg]:max-w-full [&>svg]:object-contain select-none"
+            dangerouslySetInnerHTML={{ __html: logo.imageUrl }}
+          />
+        );
+      }
       return (
-        <div
-          className="relative flex-1 w-full min-h-0 flex items-center justify-center p-4"
-          dangerouslySetInnerHTML={{ __html: svgStr }}
-          style={{ maxHeight: "100%" }}
-        />
+        <div className="relative w-full h-full flex items-center justify-center p-2">
+          <Image
+            src={logo.imageUrl}
+            alt={logo.brandName || "Logo"}
+            width={400}
+            height={400}
+            unoptimized
+            onError={() => setImgError(true)}
+            className="object-contain max-h-full max-w-full rounded-xl transition-transform duration-300"
+          />
+        </div>
       );
     }
 
-    // Fallback: image-based preview (for old logos)
-    return (
-      <div className="relative flex-1 w-full min-h-0 flex items-center justify-center">
-        <Image
-          src={logo!.imageUrl}
-          alt={logo!.brandName}
-          width={300}
-          height={300}
-          unoptimized
-          className="object-contain max-h-full rounded-xl"
-        />
-      </div>
-    );
+    // Fallback monogram
+    if (logo?.brandName) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 text-center p-4">
+          <div className="w-16 h-16 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-white font-bold text-xl shadow-inner">
+            {logo.brandName.slice(0, 2).toUpperCase()}
+          </div>
+          <span className="text-sm font-semibold text-white truncate max-w-[200px]">
+            {logo.brandName}
+          </span>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -101,14 +174,14 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
                 </Badge>
               )}
               <Badge variant="white" className="capitalize">
-                {(logo.style || "custom").replace("-", " ")}
+                {(logo.style || "custom").replace(/-/g, " ")}
               </Badge>
             </div>
           )}
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col items-center justify-center py-6">
+      <CardContent className="flex-1 flex flex-col items-center justify-center py-4">
         {/* Canvas Display */}
         <div
           className={`relative w-full max-w-sm aspect-square rounded-2xl flex items-center justify-center border transition-all overflow-hidden ${
@@ -119,20 +192,51 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
               : "bg-neutral-950 border-neutral-800 bg-[radial-gradient(#262626_1px,transparent_1px)] bg-[size:16px_16px]"
           }`}
         >
+          {/* Background Toggle Controls */}
+          {logo && !isGenerating && (
+            <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 p-1 rounded-lg bg-neutral-950/80 backdrop-blur-sm border border-neutral-800 shadow-md">
+              <button
+                type="button"
+                onClick={() => setBgMode("dark")}
+                title="Dark Background"
+                className={`p-1 rounded transition-colors cursor-pointer ${
+                  bgMode === "dark" ? "bg-neutral-800 text-white" : "text-neutral-500 hover:text-neutral-300"
+                }`}
+              >
+                <Moon className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setBgMode("light")}
+                title="Light Background"
+                className={`p-1 rounded transition-colors cursor-pointer ${
+                  bgMode === "light" ? "bg-white text-black font-bold shadow-sm" : "text-neutral-500 hover:text-neutral-300"
+                }`}
+              >
+                <Sun className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setBgMode("grid")}
+                title="Grid Background"
+                className={`p-1 rounded transition-colors cursor-pointer ${
+                  bgMode === "grid" ? "bg-neutral-800 text-white" : "text-neutral-500 hover:text-neutral-300"
+                }`}
+              >
+                <Grid className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {isGenerating ? (
             <div className="flex flex-col items-center gap-3 text-center px-4">
               <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
               <p className="text-sm font-medium text-white">Synthesizing logo concepts...</p>
-              <p className="text-xs text-neutral-500">Structured SVG generation</p>
+              <p className="text-xs text-neutral-500">Vector SVG generation</p>
             </div>
           ) : logo ? (
-            <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 p-6">
+            <div className="relative w-full h-full flex flex-col items-center justify-center p-4">
               {renderPreview()}
-              {!logo.logoData && (
-                <p className="text-white font-bold text-lg uppercase tracking-[0.2em] text-center shrink-0">
-                  {logo.brandName}
-                </p>
-              )}
             </div>
           ) : (
             <div className="text-center px-6 py-12">
@@ -148,13 +252,13 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
         </div>
 
         {/* Action buttons & prompt inspector */}
-        {logo && (
-          <div className="w-full mt-6 space-y-3">
+        {logo && !isGenerating && (
+          <div className="w-full mt-5 space-y-2.5">
             {/* Open in Canvas Editor CTA */}
             {onOpenEditor && (
               <Button onClick={onOpenEditor} variant="primary" className="w-full">
                 <Edit3 className="w-4 h-4 mr-2" />
-                {logo.logoData ? "Edit in Logo Editor" : "Edit in Canvas Editor"}
+                <span>Edit in Canvas Editor</span>
               </Button>
             )}
 
@@ -162,15 +266,15 @@ export function LogoCanvas({ logo, isGenerating, onOpenEditor }: LogoCanvasProps
               {logo.logoData && (
                 <Button onClick={handleDownloadSvg} variant="secondary" className="flex-1 text-xs">
                   <FileCode className="w-3.5 h-3.5 mr-1.5" />
-                  Download SVG
+                  SVG
                 </Button>
               )}
               <Button onClick={handleDownloadPng} variant="secondary" className="flex-1 text-xs">
                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                Download PNG
+                PNG
               </Button>
               <Button onClick={handleCopyPrompt} variant="secondary" className="text-xs">
-                {copied ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span className="ml-1">{copied ? "Copied" : "Prompt"}</span>
               </Button>
             </div>

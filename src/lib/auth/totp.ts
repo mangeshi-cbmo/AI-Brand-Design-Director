@@ -1,6 +1,5 @@
 import { generateSecret, generateURI, verifySync } from "otplib";
 import QRCode from "qrcode";
-import { connectDB } from "@/lib/db/client";
 import { TotpSecretModel } from "@/lib/db/models/totp-secret.model";
 
 /**
@@ -26,7 +25,6 @@ if (!globalThis.totpSecretCache) {
 
 async function loadSecretFromDB(email: string): Promise<string | null> {
   try {
-    await connectDB();
     const doc = await TotpSecretModel.findOne({ email }).lean();
     return doc?.secret ?? null;
   } catch (err) {
@@ -42,7 +40,6 @@ async function loadSecretFromDB(email: string): Promise<string | null> {
  */
 async function createOrFetchSecretInDB(email: string, freshSecret: string): Promise<string | null> {
   try {
-    await connectDB();
     const doc = await TotpSecretModel.findOneAndUpdate(
       { email },
       { $setOnInsert: { email, secret: freshSecret } },

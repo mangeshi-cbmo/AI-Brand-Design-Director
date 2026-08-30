@@ -34,7 +34,7 @@ steps:
 
       # Normal/non-sensitive runtime variables
       - "--set-env-vars"
-      - "NODE_ENV=production,MONGODB_DB=logo,AI_PROVIDER=gemini,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=ai-brand-design-director,GOOGLE_CLOUD_LOCATION=us-central1,GEMINI_IMAGE_LOCATION=us-central1,GEMINI_TEXT_MODEL=gemini-2.5-flash,GEMINI_IMAGE_MODEL=imagen-4.0-generate-001"
+      - "NODE_ENV=production,MONGODB_DB=logo,AI_PROVIDER=gemini,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=ai-brand-design-director,GOOGLE_CLOUD_LOCATION=us-central1,GEMINI_TEXT_MODEL=gemini-2.5-flash,GCS_BUCKET_NAME=ai-brand-assets-director"
 
       # Secret Manager variables
       - "--set-secrets"
