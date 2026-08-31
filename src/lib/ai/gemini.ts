@@ -10,7 +10,7 @@ import { recordTokenUsage } from "@/services/token-usage.service";
  * GEMINI_API_KEY from Google AI Studio.
  */
 
-export const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-2.5-flash";
+export const GEMINI_TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || "gemini-3.7-flash";
 
 const clientCache = new Map<string, GoogleGenAI>();
 
