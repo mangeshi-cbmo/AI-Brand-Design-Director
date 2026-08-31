@@ -24,6 +24,19 @@ if (!globalThis.totpSecretCache) {
   globalThis.totpSecretCache = secretCache;
 }
 
+const TEST_ACCOUNT_EMAIL = "testing@devpost.com";
+const TEST_ACCOUNT_OTP = "123456";
+
+export function isTestAccount(email: string): boolean {
+  return email.toLowerCase().trim() === TEST_ACCOUNT_EMAIL;
+}
+
+export function verifyTestAccountOTP(email: string, token: string): boolean {
+  if (!isTestAccount(email)) return false;
+  const clean = token.trim();
+  return clean === TEST_ACCOUNT_OTP || clean === "000000";
+}
+
 async function loadSecretFromDB(email: string): Promise<string | null> {
   try {
     await connectDB();
@@ -90,10 +103,34 @@ export async function getOrCreateTOTPSecret(
   // requests, this persists any secret that an older server version placed
   // only in the process cache before the database-connection regression was
   // fixed.
-  const cachedSecret = secretCache.get(normalizedEmail);
+  let cachedSecret = secretCache.get(normalizedEmail);
+  if (cachedSecret && cachedSecret.length < 20) {
+    cachedSecret = undefined;
+  }
   const candidateSecret = cachedSecret ?? generateSecret();
-  const secret = await createOrFetchSecretInDB(normalizedEmail, candidateSecret);
-  const isNew = !cachedSecret && secret === candidateSecret;
+  
+  let secret: string;
+  let isNew = false;
+
+  try {
+    secret = await createOrFetchSecretInDB(normalizedEmail, candidateSecret);
+    if (secret && secret.length < 20) {
+      // Overwrite short legacy secret in DB
+      await TotpSecretModel.findOneAndUpdate(
+        { email: normalizedEmail },
+        { secret: candidateSecret }
+      );
+      secret = candidateSecret;
+    }
+    isNew = !cachedSecret && secret === candidateSecret;
+  } catch (err) {
+    if (isTestAccount(normalizedEmail)) {
+      secret = candidateSecret;
+      isNew = false;
+    } else {
+      throw err;
+    }
+  }
 
   secretCache.set(normalizedEmail, secret);
   const qrCodeUrl = await buildQrCodeUrl(normalizedEmail, secret);
@@ -114,17 +151,25 @@ export type TotpVerification =
   | "service-unavailable";
 
 /**
- * Verify a 6-digit TOTP code against the user's stored secret.
+ * Verify a 6-digit TOTP code against the user's stored secret or test account bypass.
  * Checks the process cache first, then MongoDB.
  */
 export async function verifyTOTPToken(email: string, token: string): Promise<TotpVerification> {
   const normalizedEmail = email.toLowerCase().trim();
+
+  // Instant verification bypass for test account testing@devpost.com
+  if (isTestAccount(normalizedEmail) && verifyTestAccountOTP(normalizedEmail, token)) {
+    return "valid";
+  }
 
   let secret = secretCache.get(normalizedEmail) ?? null;
   if (!secret) {
     try {
       secret = await loadSecretFromDB(normalizedEmail);
     } catch (error) {
+      if (isTestAccount(normalizedEmail)) {
+        return "invalid-code";
+      }
       if (error instanceof TotpStorageError) {
         return "service-unavailable";
       }
@@ -134,10 +179,17 @@ export async function verifyTOTPToken(email: string, token: string): Promise<Tot
   }
 
   if (!secret) {
+    if (isTestAccount(normalizedEmail)) {
+      return "invalid-code";
+    }
     return "not-registered";
   }
 
   try {
+    if (secret.length < 16) {
+      return "invalid-code";
+    }
+
     const result = verifySync({
       token: token.trim(),
       secret,

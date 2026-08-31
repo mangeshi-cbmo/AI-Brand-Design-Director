@@ -557,9 +557,8 @@ export default function LandingPage() {
                         </label>
                         {/* Live TOTP rotation countdown */}
                         <span
-                          className={`flex items-center gap-1.5 text-[10px] font-mono ${
-                            lowTime ? "text-amber-400" : "text-neutral-500"
-                          }`}
+                          className={`flex items-center gap-1.5 text-[10px] font-mono ${lowTime ? "text-amber-400" : "text-neutral-500"
+                            }`}
                         >
                           <svg width="14" height="14" viewBox="0 0 16 16" className="-rotate-90">
                             <circle
@@ -611,11 +610,10 @@ export default function LandingPage() {
                             onChange={(e) => handleDigitChange(i, e.target.value)}
                             onKeyDown={(e) => handleDigitKeyDown(i, e)}
                             onFocus={(e) => e.target.select()}
-                            className={`w-full aspect-[4/5] max-w-[56px] text-center font-mono text-xl sm:text-2xl rounded-xl bg-black border text-white caret-white focus:outline-none transition-all duration-150 disabled:opacity-50 ${
-                              digit
+                            className={`w-full aspect-[4/5] max-w-[56px] text-center font-mono text-xl sm:text-2xl rounded-xl bg-black border text-white caret-white focus:outline-none transition-all duration-150 disabled:opacity-50 ${digit
                                 ? "border-neutral-500 shadow-[0_0_0_3px_rgba(255,255,255,0.05)]"
                                 : "border-neutral-800 focus:border-neutral-400 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.05)]"
-                            }`}
+                              }`}
                           />
                         ))}
                       </motion.div>
