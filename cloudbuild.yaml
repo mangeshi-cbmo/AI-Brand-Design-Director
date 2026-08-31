@@ -1,0 +1,49 @@
+steps:
+  # 1. Build Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "build"
+      - "-t"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-apps/ai-brand-design-director:$SHORT_SHA"
+      - "."
+
+  # 2. Push Docker image
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      - "push"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-apps/ai-brand-design-director:$SHORT_SHA"
+
+  # 3. Deploy to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: "gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "ai-brand-design-director"
+      - "--image"
+      - "us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-apps/ai-brand-design-director:$SHORT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+
+      # Use dedicated runtime identity
+      - "--service-account"
+      - "cloud-run-runtime@ai-brand-design-director.iam.gserviceaccount.com"
+
+      # Normal/non-sensitive runtime variables
+      - "--set-env-vars"
+      - "NODE_ENV=production,MONGODB_DB=logo,AI_PROVIDER=gemini,GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=ai-brand-design-director,GOOGLE_CLOUD_LOCATION=global,GEMINI_TEXT_MODEL=gemini-3.7-flash,GCS_BUCKET_NAME=ai-brand-assets-director"
+
+      # Secret Manager variables
+      - "--set-secrets"
+      - "NEXTAUTH_URL=NEXTAUTH_URL:latest,NEXT_PUBLIC_APP_URL=NEXT_PUBLIC_APP_URL:latest,NEXTAUTH_SECRET=NEXTAUTH_SECRET:latest,MONGODB_URI=MONGODB_URI:latest,DATABASE_URL=DATABASE_URL:latest"
+
+images:
+  - "us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-apps/ai-brand-design-director:$SHORT_SHA"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: "1200s"

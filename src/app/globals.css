@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+/* The studio is dark-only by design — never follow the OS light scheme,
+   otherwise white text sits on a white body background. */
+:root {
+  --background: #000000;
+  --foreground: #ededed;
+}
+
+html.light {
+  --background: #fafafa;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Light-mode equivalents for the studio's existing neutral utility palette. */
+html.light .bg-black,
+html.light .bg-black\/80,
+html.light .bg-black\/90,
+html.light .bg-black\/95 {
+  background-color: #fafafa;
+}
+html.light .bg-neutral-950,
+html.light .bg-neutral-950\/50,
+html.light .bg-neutral-950\/80,
+html.light .bg-neutral-950\/90,
+html.light .bg-neutral-950\/95 {
+  background-color: #ffffff;
+}
+html.light .bg-neutral-900,
+html.light .bg-neutral-900\/40,
+html.light .bg-neutral-900\/50,
+html.light .bg-neutral-900\/60,
+html.light .bg-neutral-900\/70,
+html.light .bg-neutral-900\/80 {
+  background-color: #f5f5f5;
+}
+html.light .bg-neutral-800,
+html.light .bg-neutral-800\/50 {
+  background-color: #e5e5e5;
+}
+html.light .text-white { color: #171717; }
+html.light .text-neutral-100 { color: #171717; }
+html.light .text-neutral-200 { color: #262626; }
+html.light .text-neutral-300 { color: #404040; }
+html.light .text-neutral-400 { color: #525252; }
+html.light .text-neutral-500,
+html.light .text-neutral-600 { color: #737373; }
+html.light .text-neutral-700 { color: #737373; }
+html.light .border-neutral-900,
+html.light .border-neutral-900\/80 { border-color: #e5e5e5; }
+html.light .border-neutral-800,
+html.light .border-neutral-800\/50,
+html.light .border-neutral-800\/60,
+html.light .border-neutral-800\/80 { border-color: #d4d4d4; }
+html.light .border-neutral-700 { border-color: #a3a3a3; }
+html.light .hover\:bg-neutral-900:hover { background-color: #eeeeee; }
+html.light .hover\:bg-neutral-800:hover { background-color: #e5e5e5; }
+html.light .hover\:text-white:hover { color: #171717; }
+
+html.light .theme-toggle {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+html.light .theme-icon-dark { display: none; }
+html.light .theme-icon-light { display: block; }
+
+html.light [class*="bg-red-"].text-white,
+html.light [class*="bg-emerald-"].text-white,
+html.light [class*="bg-blue-"].text-white,
+html.light [class*="bg-purple-"].text-white,
+html.light [class*="bg-indigo-"].text-white {
+  color: #ffffff;
+}
+
+html.light .chat-scroll {
+  scrollbar-color: #c7c7c7 transparent;
+}
+
+/* Sleek dark scrollbar for chat & panels */
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #2e2e2e transparent;
+}
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border-radius: 9999px;
+}
+.chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: #454545;
+}
+
+/* Shimmering text for live agent activity */
+@keyframes text-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+.text-shimmer {
+  background: linear-gradient(90deg, #737373 0%, #ffffff 45%, #737373 90%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer 2.2s linear infinite;
+}
+
+html.light .text-shimmer {
+  background: linear-gradient(90deg, #737373 0%, #171717 45%, #737373 90%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Typing indicator dots */
+@keyframes typing-bounce {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+.typing-dot {
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}

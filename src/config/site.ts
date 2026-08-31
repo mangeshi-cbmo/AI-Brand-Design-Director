@@ -1,0 +1,35 @@
+export const siteConfig = {
+  name: "LogoForge AI",
+  shortName: "LogoForge",
+  description:
+    "Next-generation AI Brand Architect and Vector Logo Studio. Generate intelligent brand identities, production-grade vector marks, and complete design systems in seconds.",
+  url: process.env.NEXT_PUBLIC_APP_URL || "https://logoforge.ai",
+  ogImage: "/og-image.png",
+  creator: "LogoForge AI Team",
+  publisher: "LogoForge AI",
+  twitterHandle: "@logoforge",
+  keywords: [
+    "AI Logo Generator",
+    "AI Brand Design Director",
+    "Brand Architect",
+    "Vector Logo Studio",
+    "Startup Branding",
+    "SVG Logo Generator",
+    "Brand Guidelines Generator",
+    "Design System Generator",
+    "AI Brand Identity",
+    "Canvas Logo Editor",
+    "Vector Mark Design",
+    "Generative AI Branding",
+  ],
+  links: {
+    github: "https://github.com",
+    docs: "/docs",
+    twitter: "https://twitter.com",
+  },
+  navItems: [
+    { label: "Generator", href: "/generate" },
+    { label: "Gallery", href: "/history" },
+    { label: "Pricing", href: "/pricing" },
+  ],
+};

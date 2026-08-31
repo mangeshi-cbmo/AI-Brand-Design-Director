@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+.github
+.vscode
+.idea
+.agents
+.codex
+coverage
+*.log
+npm-debug.log
+.env*
+.flaskenv*
+!.env.project
+!.env.vault
