@@ -26,6 +26,11 @@ export const authOptions: NextAuthOptions = {
             "No authenticator is linked to this email yet. Go back and re-enter your email to set it up."
           );
         }
+        if (result === "service-unavailable") {
+          throw new Error(
+            "The authenticator service is temporarily unavailable. Please try again."
+          );
+        }
         if (result !== "valid") {
           throw new Error("Invalid or expired 6-digit code. Please try again.");
         }

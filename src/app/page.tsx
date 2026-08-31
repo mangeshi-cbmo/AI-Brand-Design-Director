@@ -100,9 +100,7 @@ export default function LandingPage() {
 
       setQrCodeUrl(json.data.qrCodeUrl);
       setSecretKey(json.data.secret);
-      if (json.data.isNew) {
-        setShowQR(true);
-      }
+      setShowQR(json.data.isNew);
       setDigits(Array(6).fill(""));
       setStep("totp");
     } catch (err) {
